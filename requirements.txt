@@ -14,10 +14,12 @@ google-auth-httplib2
 requests
 pydantic[email]
 email-validator
-passlib[bcrypt]
 python-multipart
 python-jose[cryptography]
-bcrypt
+
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
+
 httpx
 psycopg[binary]
 psycopg2-binary
