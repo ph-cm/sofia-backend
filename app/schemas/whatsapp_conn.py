@@ -1,0 +1,1 @@
+## modelos pydantic para conexao z-api (whatsapp)

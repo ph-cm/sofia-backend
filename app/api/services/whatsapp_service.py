@@ -1,0 +1,1 @@
+## logica de negocios para z-api(criação de instancias, encio de requisições)

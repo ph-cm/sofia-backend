@@ -1,0 +1,1 @@
+## rotas para Z-API (ex: /connect, /webhooks)
