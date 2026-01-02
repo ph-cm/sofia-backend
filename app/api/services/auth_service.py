@@ -11,14 +11,23 @@ class AuthService:
 
     @staticmethod
     def create_user(db: Session, email: str, password: str):
+        # bcrypt: limite de 72 BYTES
+        password_bytes = password.encode("utf-8")
+
+        if len(password_bytes) > 72:
+            raise ValueError("Senha muito longa (máx. 72 bytes)")
+
+        password_hash = pwd.hash(password)
+
         user = User(
             email=email,
-            password = password[:72],
-            password_hash=pwd.hash(password)
+            password_hash=password_hash
         )
+
         db.add(user)
         db.commit()
         db.refresh(user)
+
         return user
 
     @staticmethod
