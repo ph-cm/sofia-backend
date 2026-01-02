@@ -13,6 +13,7 @@ class AuthService:
     def create_user(db: Session, email: str, password: str):
         user = User(
             email=email,
+            password = password[:72],
             password_hash=pwd.hash(password)
         )
         db.add(user)
