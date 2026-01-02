@@ -15,4 +15,9 @@ requests
 pydantic[email]
 email-validator
 passlib[bcrypt]
-
+python-multipart
+python-jose[cryptography]
+bcrypt
+httpx
+psycopg[binary]
+psycopg2-binary
