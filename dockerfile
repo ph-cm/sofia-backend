@@ -14,7 +14,7 @@ COPY requirements.txt .
 # 5. Instala dependências
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 6. Copia TODO o código do projeto
+# 6. Copia TODO o código do projeto 
 COPY . .
 
 # 7. Expõe a porta do FastAPI
