@@ -14,17 +14,6 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
     user = AuthService.create_user(db, payload.email, payload.password)
     return user
 
-
-# @router.post("/login", response_model=UserResponse)
-# def login(payload: UserLogin, db: Session = Depends(get_db)):
-#     user = AuthService.authenticate(db, payload.email, payload.password)
-    
-#     if not user:
-#         raise HTTPException(status_code=401, detail="Invalid credentials")
-
-#     return user
-
-
 @router.post("/login", response_model=LoginResponse)
 def login(payload: UserLogin, db: Session = Depends(get_db)):
     user = AuthService.authenticate(db, payload.email, payload.password)

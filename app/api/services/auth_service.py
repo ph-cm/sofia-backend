@@ -23,6 +23,9 @@ class AuthService:
             email=email,
             password_hash=password_hash
         )
+        print("🔥🔥🔥 AUTH SERVICE VERSION 2026-01-02 🔥🔥🔥")
+        print("PASSWORD RECEIVED:", password)
+        print("LEN BYTES:", len(password.encode("utf-8")))
 
         db.add(user)
         db.commit()
