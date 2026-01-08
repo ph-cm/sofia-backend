@@ -4,6 +4,7 @@ from app.db.session import engine
 # IMPORTAR TODOS OS MODELOS para que o SQLAlchemy registre no metadata
 from app.api.models.user import User
 from app.api.models.google_token import GoogleToken
+from app.api.models.disponibilidade import ProfissionalDisponibilidade
 # Se futuramente tiver mais modelos, importe aqui
 
 def create_all():
