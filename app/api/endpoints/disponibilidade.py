@@ -3,7 +3,6 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.api.models.disponibilidade import ProfissionalDisponibilidade
 from app.schemas.disponibilidade import DisponibilidadePayload
-from app.core.constants import MAPA_DIAS_SEMANA
 
 router = APIRouter()
 
@@ -36,18 +35,17 @@ def salvar_disponibilidade(payload: DisponibilidadePayload, db: Session = Depend
         .filter(ProfissionalDisponibilidade.user_id == payload.user_id)\
         .update({"ativo": False})
 
-    for dia_raw, horarios in payload.disponibilidade.items():
+    for dia, horarios in payload.disponibilidade.items():
 
-        dia = dia_raw.lower()
-        dia_num = MAPA_DIAS_SEMANA.get(dia)
+        dia_int = int(dia)
 
-        if dia_num is None:
-            raise HTTPException(400, f"Dia da semana inválido: {dia_raw}")
+        if dia_int < 1 or dia_int > 7:
+            raise HTTPException(status_code=400, detail=f"Dia da semana inválido: {dia}")
 
         for h in horarios:
             registro = ProfissionalDisponibilidade(
                 user_id=payload.user_id,
-                dia_semana=dia_num,
+                dia_semana=dia_int,
                 hora_inicio=h.inicio,
                 hora_fim=h.fim,
                 ativo=True
