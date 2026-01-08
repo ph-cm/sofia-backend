@@ -18,6 +18,7 @@ app.include_router(auth.router)
 app.include_router(google_debug.router)
 app.include_router(google_calendar.router)
 app.include_router(disponibilidade.router)
+
 # Exemplo: Usando uma variável de configuração
 @app.get("/")
 def read_root():
