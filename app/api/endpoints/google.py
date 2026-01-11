@@ -66,6 +66,8 @@ def get_access_token(user=Depends(get_current_user), db: Session = Depends(get_d
     except Exception as e:
         raise HTTPException(404, "Token não encontrado ou expirado")
 
+from fastapi import status
+
 @router.get("/token/internal")
 def get_access_token_for_n8n(
     user_id: int = Query(...),
@@ -75,6 +77,20 @@ def get_access_token_for_n8n(
     try:
         token = GoogleTokenService.get_valid_access_token(db, user_id)
         return {"access_token": token}
-    except Exception:
-        raise HTTPException(404, "Token não encontrado ou inválido")
+
+    except GoogleTokenService.TokenNotFound:
+        raise HTTPException(status_code=404, detail="Token não encontrado")
+
+    except GoogleTokenService.TokenRefreshFailed as e:
+        raise HTTPException(
+            status_code=401,
+            detail=f"Falha ao renovar token Google: {str(e)}"
+        )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro interno ao obter token Google: {str(e)}"
+        )
+
 

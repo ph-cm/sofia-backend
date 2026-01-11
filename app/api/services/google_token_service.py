@@ -5,6 +5,13 @@ from sqlalchemy.orm import Session
 from app.api.models.google_token import GoogleToken
 from app.core.config import settings
 
+class GoogleTokenNotFound(Exception):
+    pass
+
+
+class GoogleTokenRefreshFailed(Exception):
+    pass
+
 
 class GoogleTokenService:
 
@@ -64,7 +71,10 @@ class GoogleTokenService:
         )
 
         if response.status_code != 200:
-            raise Exception(response.text)
+            raise GoogleTokenRefreshFailed(
+                f"Erro ao renovar token Google: {response.text}"
+            )
+
 
         data = response.json()
 
@@ -82,7 +92,8 @@ class GoogleTokenService:
         token = GoogleTokenService.get_by_user(db, user_id)
 
         if not token:
-            raise Exception("Usuário não conectado ao Google")
+         raise GoogleTokenNotFound("Usuário não conectado ao Google")
+
 
         if (
             token.google_token_expiry
