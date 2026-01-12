@@ -55,3 +55,31 @@ def list_google_events(
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+@router.delete("/{event_id}")
+def delete_google_event(
+    event_id: str,
+    calendar_id: str,
+    user_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Remove um evento do Google Calendar.
+    """
+    try:
+        # 1) pegar token do user
+        token = GoogleTokenService.get_by_user(db, user_id)
+        if not token:
+            raise HTTPException(404, "Token Google não encontrado para o usuário.")
+
+        # 2) chamar Google Calendar API via service
+        google_calendar_service.delete_event(
+            token=token,
+            calendar_id=calendar_id,
+            event_id=event_id
+        )
+
+        return {"status": "deleted", "event_id": event_id}
+
+    except Exception as e:
+        raise HTTPException(400, str(e))

@@ -1,8 +1,9 @@
 import requests
 from datetime import datetime
+from app.api.services.google_token_service import GoogleTokenService
 
 GOOGLE_FREEBUSY_URL = "https://www.googleapis.com/calendar/v3/freeBusy"
-
+GOOGLE_DELETE_EVENT_URL = "https://www.googleapis.com/calendar/v3/calendars/{calendarId}/events/{eventId}"
 
 class GoogleCalendarService:
 
@@ -118,3 +119,28 @@ class GoogleCalendarService:
         return data.get("items", [])
 
 
+
+
+
+    def delete_event(self, token, calendar_id: str, event_id: str):
+        url = GOOGLE_DELETE_EVENT_URL.format(
+            calendarId=calendar_id,
+            eventId=event_id
+        )
+
+        headers = {
+            "Authorization": f"Bearer {token.google_access_token}"
+        }
+
+        response = requests.delete(url, headers=headers)
+
+        # token expirado → tentar refresh
+        if response.status_code == 401:
+            token = GoogleTokenService.refresh_access_token(self.db, token)
+            headers["Authorization"] = f"Bearer {token.google_access_token}"
+            response = requests.delete(url, headers=headers)
+
+        if response.status_code not in (200, 204):
+            raise Exception(f"Erro ao deletar evento: {response.text}")
+
+        return True
