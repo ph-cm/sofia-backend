@@ -1,26 +1,46 @@
-import requests
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
+from app.db.session import get_db
 from app.api.services.google_token_service import GoogleTokenService
+from app.api.services.google_calendar_service import GoogleCalendarService
 
-GOOGLE_CALENDAR_LIST_URL = "https://www.googleapis.com/calendar/v3/users/me/calendarList"
+router = APIRouter(prefix="/google", tags=["Google Calendar Availability"])
+
+google_calendar_service = GoogleCalendarService()
 
 
-def list_calendars(db: Session, token):
-    headers = {
-        "Authorization": f"Bearer {token.google_access_token}"
-    }
+class AvailabilityPayload(BaseModel):
+    user_id: int
+    start_date: str  # formato ISO: 2025-01-10T14:00:00-03:00
+    end_date: str
+    timezone: str = "America/Sao_Paulo"
 
-    response = requests.get(GOOGLE_CALENDAR_LIST_URL, headers=headers)
 
-    # 🔁 TOKEN EXPIRADO → REFRESH
-    if response.status_code == 401:
-        token = GoogleTokenService.refresh_access_token(db, token)
+@router.post("/availability")
+def get_google_availability(payload: AvailabilityPayload, db: Session = Depends(get_db)):
+    """
+    Retorna janelas disponíveis REAIS (Google Calendar) dentro de um período.
+    """
+    try:
+        token = GoogleTokenService.get_token_by_user(db, payload.user_id)
 
-        headers["Authorization"] = f"Bearer {token.google_access_token}"
-        response = requests.get(GOOGLE_CALENDAR_LIST_URL, headers=headers)
+        if not token:
+            raise HTTPException(status_code=404, detail="Token Google não encontrado para o usuário.")
 
-    # ❌ qualquer erro que não seja sucesso
-    if response.status_code != 200:
-        raise Exception(response.text)
+        free_slots = google_calendar_service.get_availability(
+            token=token,
+            start_date=payload.start_date,
+            end_date=payload.end_date,
+            timezone=payload.timezone
+        )
 
-    return response.json()
+        return {
+            "user_id": payload.user_id,
+            "start_date": payload.start_date,
+            "end_date": payload.end_date,
+            "free_slots": free_slots
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
