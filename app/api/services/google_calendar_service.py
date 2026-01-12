@@ -60,3 +60,43 @@ class GoogleCalendarService:
             })
 
         return free
+    
+    def update_event(
+        self,
+        token,
+        calendar_id: str,
+        event_id: str,
+        title: str,
+        description: str,
+        start: str,
+        end: str,
+        timezone: str
+    ):
+
+        url = f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events/{event_id}"
+
+        headers = {
+            "Authorization": f"Bearer {token.google_access_token}",
+            "Content-Type": "application/json"
+        }
+
+        body = {
+            "summary": title,
+            "description": description,
+            "start": {
+                "dateTime": start,
+                "timeZone": timezone
+            },
+            "end": {
+                "dateTime": end,
+                "timeZone": timezone
+            }
+        }
+
+        response = requests.patch(url, json=body, headers=headers)
+
+        if response.status_code not in (200, 201):
+            raise Exception(f"Erro ao atualizar evento: {response.text}")
+
+        return response.json()
+
