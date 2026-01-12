@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from app.core.config import settings
 
 # Importe seus roteadores (endpoints)
-from app.api.endpoints import whatsapp, google, users, auth, google_debug, google_calendar, disponibilidade, google_calendar_availability
+from app.api.endpoints import google,  auth, google_debug, disponibilidade, google_calendar_availability
 
 app = FastAPI(
     title="SaaS Secretaria Inteligente",
@@ -16,7 +16,6 @@ app = FastAPI(
 app.include_router(google.router)
 app.include_router(auth.router)
 app.include_router(google_debug.router)
-app.include_router(google_calendar.router)
 app.include_router(disponibilidade.router)
 app.include_router(google_calendar_availability.router)
 
