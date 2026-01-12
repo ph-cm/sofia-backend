@@ -1,46 +1,62 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from pydantic import BaseModel
-from app.db.session import get_db
-from app.api.services.google_token_service import GoogleTokenService
-from app.api.services.google_calendar_service import GoogleCalendarService
+import requests
+from datetime import datetime
 
-router = APIRouter(prefix="/google", tags=["Google Calendar Availability"])
-
-google_calendar_service = GoogleCalendarService()
+GOOGLE_FREEBUSY_URL = "https://www.googleapis.com/calendar/v3/freeBusy"
 
 
-class AvailabilityPayload(BaseModel):
-    user_id: int
-    start_date: str  # formato ISO: 2025-01-10T14:00:00-03:00
-    end_date: str
-    timezone: str = "America/Sao_Paulo"
+class GoogleCalendarService:
 
-
-@router.post("/availability")
-def get_google_availability(payload: AvailabilityPayload, db: Session = Depends(get_db)):
-    """
-    Retorna janelas disponíveis REAIS (Google Calendar) dentro de um período.
-    """
-    try:
-        token = GoogleTokenService.get_token_by_user(db, payload.user_id)
-
-        if not token:
-            raise HTTPException(status_code=404, detail="Token Google não encontrado para o usuário.")
-
-        free_slots = google_calendar_service.get_availability(
-            token=token,
-            start_date=payload.start_date,
-            end_date=payload.end_date,
-            timezone=payload.timezone
-        )
-
-        return {
-            "user_id": payload.user_id,
-            "start_date": payload.start_date,
-            "end_date": payload.end_date,
-            "free_slots": free_slots
+    def get_availability(self, token, start_date, end_date, timezone):
+        headers = {
+            "Authorization": f"Bearer {token.google_access_token}",
+            "Content-Type": "application/json"
         }
 
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        body = {
+            "timeMin": start_date,
+            "timeMax": end_date,
+            "timeZone": timezone,
+            "items": [{"id": "primary"}]
+        }
+
+        response = requests.post(GOOGLE_FREEBUSY_URL, json=body, headers=headers)
+
+        # token expirado → tenta refresh
+        if response.status_code == 401:
+            from app.api.services.google_token_service import GoogleTokenService
+            token = GoogleTokenService.refresh_access_token(token.db, token)
+            headers["Authorization"] = f"Bearer {token.google_access_token}"
+            response = requests.post(GOOGLE_FREEBUSY_URL, json=body, headers=headers)
+
+        if response.status_code != 200:
+            raise Exception(response.text)
+
+        data = response.json()
+        busy = data["calendars"]["primary"]["busy"]
+
+        return self._busy_to_free(start_date, end_date, busy)
+
+    def _busy_to_free(self, start_date, end_date, busy_intervals):
+        free = []
+        cursor = datetime.fromisoformat(start_date)
+        end_dt = datetime.fromisoformat(end_date)
+
+        for interval in busy_intervals:
+            busy_start = datetime.fromisoformat(interval["start"])
+            busy_end = datetime.fromisoformat(interval["end"])
+
+            if cursor < busy_start:
+                free.append({
+                    "inicio": cursor.isoformat(),
+                    "fim": busy_start.isoformat()
+                })
+
+            cursor = max(cursor, busy_end)
+
+        if cursor < end_dt:
+            free.append({
+                "inicio": cursor.isoformat(),
+                "fim": end_dt.isoformat()
+            })
+
+        return free
