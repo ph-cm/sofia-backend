@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 import requests
 
-from app.db import get_db
+from app.db.session import get_db
 from app.api.services.google_token_service import GoogleTokenService
 
 router = APIRouter(prefix="/google", tags=["Google Calendar"])
