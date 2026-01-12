@@ -99,4 +99,22 @@ class GoogleCalendarService:
             raise Exception(f"Erro ao atualizar evento: {response.text}")
 
         return response.json()
+    
+    def list_events(self, token, calendar_id: str):
+
+        url = f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events"
+
+        headers = {
+            "Authorization": f"Bearer {token.google_access_token}",
+            "Content-Type": "application/json"
+        }
+
+        response = requests.get(url, headers=headers)
+
+        if response.status_code != 200:
+            raise Exception(f"Erro ao listar eventos: {response.text}")
+
+        data = response.json()
+        return data.get("items", [])
+
 
