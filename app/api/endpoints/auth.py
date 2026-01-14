@@ -9,11 +9,6 @@ from app.schemas.user import LoginResponse, UserOut
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
-@router.post("/register", response_model=UserResponse)
-def register(payload: UserCreate, db: Session = Depends(get_db)):
-    user = AuthService.create_user(db, payload.email, payload.password)
-    return user
-
 @router.post("/login", response_model=LoginResponse)
 def login(payload: UserLogin, db: Session = Depends(get_db)):
     user = AuthService.authenticate(db, payload.email, payload.password)
