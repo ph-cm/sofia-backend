@@ -53,3 +53,12 @@ class LoginResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserOut
+
+class UserUpdate(BaseModel):
+    nome: Optional[str] = None
+    phone_channel: Optional[str] = None
+    calendar_id: Optional[str] = None
+    timezone: Optional[str] = None
+    duracao_consulta: Optional[int] = None
+    valor_consulta: Optional[float] = None
+    ativo: Optional[bool] = None

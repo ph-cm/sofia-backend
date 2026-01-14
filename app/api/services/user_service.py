@@ -42,6 +42,20 @@ class UserService:
         return user
 
     @staticmethod
+    def update_user(db: Session, user_id: int, data: UserUpdate):
+        user = db.query(User).filter(User.id == user_id).first()
+
+        if not user:
+            return None
+
+        for field, value in data.dict(exclude_unset=True).items():
+            setattr(user, field, value)
+
+        db.commit()
+        db.refresh(user)
+        return user
+    
+    @staticmethod
     def save_google_tokens(db: Session, user_id: int, access: str, refresh: str):
         user = db.get(User, user_id)
         user.google_access_token = access
