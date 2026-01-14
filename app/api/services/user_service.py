@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.api.models.user import User
 from app.api.models.google_token import GoogleToken
 from app.core.security import get_password_hash, verify_password
+from app.schemas.user import UserUpdate
 
 pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
