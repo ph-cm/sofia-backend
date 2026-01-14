@@ -4,15 +4,27 @@ from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 from app.api.models.user import User
 from app.api.models.google_token import GoogleToken
+from app.core.security import get_password_hash, verify_password
 
 pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 class UserService:
 
     @staticmethod
-    def create_user(db: Session, data: UserCreate):
-        hashed = pwd.hash(data.password)
-        user = User(email=data.email, password_hash=hashed)
+    def create_user(db: Session, data):
+        user = User(
+            email=data.email,
+            password_hash=get_password_hash(data.password),
+
+            nome=data.nome,
+            phone_channel=data.phone_channel,
+            calendar_id=data.calendar_id,
+            timezone=data.timezone,
+            duracao_consulta=data.duracao_consulta,
+            valor_consulta=data.valor_consulta,
+            ativo=data.ativo,
+        )
+
         db.add(user)
         db.commit()
         db.refresh(user)
@@ -23,8 +35,10 @@ class UserService:
         user = db.query(User).filter(User.email == email).first()
         if not user:
             return None
-        if not pwd.verify(password, user.password_hash):
+
+        if not verify_password(password, user.password_hash):
             return None
+
         return user
 
     @staticmethod

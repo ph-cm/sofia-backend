@@ -5,13 +5,13 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.schemas.user import UserCreate, UserLogin, UserOut
 from app.api.services.user_service import UserService
+from app.api.models.user import User    
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
 @router.post("/register", response_model=UserOut)
 def register(user: UserCreate, db: Session = Depends(get_db)):
-    # Verifica se usuário já existe
-    existing = db.query(UserCreate.model_config["model"]).filter_by(email=user.email).first()
+    existing = db.query(User).filter(User.email == user.email).first()
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
 
@@ -25,3 +25,4 @@ def login(data: UserLogin, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
     return user
+
