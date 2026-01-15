@@ -28,16 +28,20 @@ def login(data: UserLogin, db: Session = Depends(get_db)):
     return user
 
 @router.put("/update/{user_id}", response_model=UserOut)
-def update_user(db: Session, user_id: int, payload: UserUpdate):
+def update_user(
+    user_id: int,
+    payload: UserUpdate,
+    db: Session = Depends(get_db),
+):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        return None
+        raise HTTPException(status_code=404, detail="User not found")
 
-    for field, value in payload.dict(exclude_unset=True).items():
+    data = payload.dict(exclude_unset=True)
+    for field, value in data.items():
         setattr(user, field, value)
 
     db.commit()
     db.refresh(user)
     return user
-
 
