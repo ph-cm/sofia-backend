@@ -8,7 +8,7 @@ class User(Base):
 
     # Identidade do médico
     nome = Column(String, nullable=False)
-
+    inbox_id = Column(Integer, unique=True, nullable=True)
     # Número do WhatsApp conectado ao Chatwoot
     phone_channel = Column(String, unique=True, index=True, nullable=False)
 

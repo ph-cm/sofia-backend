@@ -8,14 +8,20 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str
 
-    # 🔽 novos campos (médico / tenant)
     nome: Optional[str] = None
-    phone_channel: Optional[str] = None
+
+    # contato do médico (opcional, administrativo)
+    phone_channel: Optional[str] = None  
+
+    # chave operacional
+    inbox_id: Optional[int] = None
+
     calendar_id: Optional[str] = "primary"
     timezone: Optional[str] = "America/Sao_Paulo"
     duracao_consulta: Optional[int] = 60
     valor_consulta: Optional[int] = 0
     ativo: Optional[bool] = True
+
 
 
 # =========================
@@ -41,6 +47,8 @@ class UserOut(BaseModel):
     duracao_consulta: Optional[int] = None
     valor_consulta: Optional[int] = None
     ativo: Optional[bool] = None
+    inbox_id: Optional[int] = None
+
 
     class Config:
         from_attributes = True
