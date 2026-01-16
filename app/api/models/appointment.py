@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Integer, String, Text, DateTime
 from sqlalchemy.sql import func
 from app.db.base_class import Base
+from typing import Optional
 
 class Appointment(Base):
     __tablename__ = "appointments"
@@ -9,9 +10,9 @@ class Appointment(Base):
 
     user_id = Column(Integer, nullable=False)
 
-    conversation_id = Column(String, nullable=True)
-    contact_id = Column(String, nullable=True)
-    telefone = Column(String, nullable=True)
+    conversation_id: Optional[int] = None
+    contact_id: Optional[int] = None
+    telefone: Optional[str] = None
 
     calendar_id = Column(String, default="primary")
     google_event_id = Column(String, unique=True, nullable=False)
