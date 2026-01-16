@@ -1,29 +1,37 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime
-from sqlalchemy.sql import func
-from app.db.base_class import Base
+from __future__ import annotations
+
+from datetime import datetime
 from typing import Optional
+
+from sqlalchemy import Integer, String, DateTime, Text, ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.db.base_class import Base
+
 
 class Appointment(Base):
     __tablename__ = "appointments"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
 
-    user_id = Column(Integer, nullable=False)
+    # quem é o profissional/tenant dono do evento
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), index=True, nullable=False)
 
-    conversation_id: Optional[int] = None
-    contact_id: Optional[int] = None
-    telefone: Optional[str] = None
+    # dados do Google
+    calendar_id: Mapped[str] = mapped_column(String(128), default="primary", nullable=False)
+    event_id: Mapped[str] = mapped_column(String(256), index=True, nullable=False)
 
-    calendar_id = Column(String, default="primary")
-    google_event_id = Column(String, unique=True, nullable=False)
+    start_datetime: Mapped[str] = mapped_column(String(64), nullable=False)
+    end_datetime: Mapped[str] = mapped_column(String(64), nullable=False)
 
-    start_datetime = Column(String, nullable=False)
-    end_datetime = Column(String, nullable=False)
+    summary: Mapped[str] = mapped_column(String(256), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
-    summary = Column(String, nullable=False)
-    description = Column(Text, nullable=True)
+    timezone: Mapped[str] = mapped_column(String(64), default="America/Sao_Paulo", nullable=False)
 
-    status = Column(String, default="confirmed")
+    # contexto (Chatwoot) - pode ser NULL
+    conversation_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
+    contact_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
+    telefone: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, index=True)
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
