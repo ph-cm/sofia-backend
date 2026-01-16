@@ -3,7 +3,9 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.api.services.google_token_service import GoogleTokenService
-from app.api.services.google_calendar_service import GoogleCalendarService
+from app.api.services.google_calendar_service import GoogleCalendarService, google_calendar_service
+from app.schemas.google_events import GoogleEventCreateIn, GoogleEventCreateOut
+from app.api.services.google_calendar_events_service import GoogleCalendarEventsService
 
 router = APIRouter(prefix="/google/events", tags=["google-calendar"])
 
@@ -83,3 +85,30 @@ def delete_google_event(
 
     except Exception as e:
         raise HTTPException(400, str(e))
+    
+@router.post("/create", response_model=GoogleEventCreateOut)
+def create_google_event(payload: GoogleEventCreateIn, db: Session = Depends(get_db)):
+    access_token = GoogleTokenService.get_valid_access_token(db, payload.user_id)
+
+    event = GoogleCalendarEventsService.create_event(
+        access_token=access_token,
+        calendar_id=payload.calendar_id,
+        start_datetime=payload.start_datetime,
+        end_datetime=payload.end_datetime,
+        summary=payload.summary,
+        description=payload.description or "",
+        timezone=payload.timezone or "America/Sao_Paulo",
+    )
+
+    return {
+        "status": "ok",
+        "event": {
+            "id": event.get("id"),
+            "htmlLink": event.get("htmlLink"),
+            "calendar_id": payload.calendar_id,
+            "summary": event.get("summary"),
+            "description": event.get("description"),
+            "start": (event.get("start") or {}).get("dateTime"),
+            "end": (event.get("end") or {}).get("dateTime"),
+        },
+    }
