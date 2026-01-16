@@ -6,6 +6,7 @@ from app.db.session import get_db
 from app.api.services.google_token_service import GoogleTokenService
 from app.core.security import get_current_user
 from app.core.security import verify_n8n_api_key
+from datetime import datetime, timezone
 
 
 router = APIRouter(prefix="/google", tags=["Google"])
@@ -38,26 +39,32 @@ def google_callback(code: str, state: str, db: Session = Depends(get_db)):
 
 
 @router.get("/refresh")
-def refresh_google_token(user_id: int, db: Session = Depends(get_db)):
-    tokens = UserService.get_google_tokens(db, user_id)
-
-    if not tokens:
+def refresh_google_token(user_id: int = Query(...), db: Session = Depends(get_db)):
+    token_row = GoogleTokenService.get_by_user(db, user_id)
+    if not token_row:
         raise HTTPException(404, "Google not connected")
 
     refreshed = google_service.refresh_access_token(
-        access_token=tokens.google_access_token,
-        refresh_token=tokens.google_refresh_token
+        access_token=token_row.google_access_token,
+        refresh_token=token_row.google_refresh_token,
     )
 
-    UserService.update_google_access_token(
-        db=db,
-        user_id=user_id,
-        access=refreshed["access"],
-        expiry=refreshed["expiry"]
-    )
+    # garante tz-aware UTC
+    expiry = refreshed.get("expiry")
+    if expiry and expiry.tzinfo is None:
+        expiry = expiry.replace(tzinfo=timezone.utc)
 
-    return {"status": "refreshed"}
+    token_row.google_access_token = refreshed["access"]
+    token_row.google_token_expiry = expiry
 
+    db.commit()
+    db.refresh(token_row)
+
+    return {
+        "status": "refreshed",
+        "access_token_tail": token_row.google_access_token[-6:],
+        "expiry": token_row.google_token_expiry,
+    }
 @router.get("/token")
 def get_access_token(user=Depends(get_current_user), db: Session = Depends(get_db)):
     try:
