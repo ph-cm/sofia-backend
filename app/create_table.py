@@ -6,6 +6,8 @@ from app.api.models.user import User
 from app.api.models.google_token import GoogleToken
 from app.api.models.disponibilidade import ProfissionalDisponibilidade
 from app.api.models.conversation_context import ConversationContext
+from app.api.models.appointment import Appointment   # <- importar também
+
 # Se futuramente tiver mais modelos, importe aqui
 
 def create_all():
