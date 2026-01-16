@@ -144,3 +144,5 @@ class GoogleCalendarService:
             raise Exception(f"Erro ao deletar evento: {response.text}")
 
         return True
+
+google_calendar_service = GoogleCalendarService()

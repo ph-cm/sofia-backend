@@ -1,9 +1,7 @@
 import requests
-from dateutil import parser as dateparser
-from fastapi import HTTPException
 
 class GoogleCalendarEventsService:
-    GOOGLE_CAL_BASE = "https://www.googleapis.com/calendar/v3"
+    GOOGLE_EVENTS_URL = "https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events"
 
     @staticmethod
     def create_event(
@@ -12,48 +10,25 @@ class GoogleCalendarEventsService:
         start_datetime: str,
         end_datetime: str,
         summary: str,
-        description: str = "",
-        timezone: str = "America/Sao_Paulo",
-    ) -> dict:
+        description: str,
+        timezone: str,
+    ):
+        url = GoogleCalendarEventsService.GOOGLE_EVENTS_URL.format(calendar_id=calendar_id)
 
-        # valida ISO e ordem
-        try:
-            start_dt = dateparser.isoparse(start_datetime)
-            end_dt = dateparser.isoparse(end_datetime)
-        except Exception:
-            raise HTTPException(
-                status_code=422,
-                detail="start_datetime/end_datetime inválidos (use ISO 8601 com timezone)",
-            )
-
-        if end_dt <= start_dt:
-            raise HTTPException(status_code=422, detail="end_datetime deve ser maior que start_datetime")
-
-        url = f"{GoogleCalendarEventsService.GOOGLE_CAL_BASE}/calendars/{calendar_id}/events"
         headers = {
             "Authorization": f"Bearer {access_token}",
             "Content-Type": "application/json",
-            "Accept": "application/json",
         }
 
         body = {
             "summary": summary,
-            "description": description or "",
+            "description": description,
             "start": {"dateTime": start_datetime, "timeZone": timezone},
             "end": {"dateTime": end_datetime, "timeZone": timezone},
         }
 
-        resp = requests.post(url, headers=headers, json=body, timeout=30)
+        r = requests.post(url, json=body, headers=headers)
+        if r.status_code not in (200, 201):
+            raise Exception(f"Erro ao criar evento: {r.text}")
 
-        if resp.status_code not in (200, 201):
-            # token inválido / perms / calendar inválido etc
-            raise HTTPException(
-                status_code=502,
-                detail={
-                    "msg": "Falha ao criar evento no Google Calendar",
-                    "google_status": resp.status_code,
-                    "google_body": resp.text,
-                },
-            )
-
-        return resp.json()
+        return r.json()
