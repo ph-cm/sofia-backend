@@ -5,7 +5,7 @@ from app.db.session import get_db
 from app.api.services.google_token_service import GoogleTokenService
 from app.api.services.google_calendar_service import google_calendar_service
 from app.api.services.google_calendar_events_service import GoogleCalendarEventsService
-from app.schemas.google_events import GoogleEventCreateIn, GoogleEventCreateOut
+from app.schemas.google_events import GoogleEventCreateIn, GoogleEventCreateOut, GoogleEventUpdateIn, GoogleEventUpdateOut
 
 router = APIRouter(prefix="/google/events", tags=["google-calendar"])
 
