@@ -102,3 +102,48 @@ def create_google_event(payload: GoogleEventCreateIn, db: Session = Depends(get_
             event=None,
             detail={"error": str(e)},
         )
+
+
+@router.patch("/update", response_model=GoogleEventUpdateOut)
+def update_google_event(payload: GoogleEventUpdateIn, db: Session = Depends(get_db)):
+    """
+    Atualiza um evento no Google Calendar usando token do usuário salvo no banco.
+    Aceita payload no formato "n8n-friendly".
+    """
+    token = GoogleTokenService.get_by_user(db, payload.user_id)
+    if not token:
+        raise HTTPException(status_code=404, detail="Usuário não conectado ao Google")
+
+    try:
+        updated = google_calendar_service.update_event(
+            token=token,
+            calendar_id=payload.id_agenda or "primary",
+            event_id=payload.event_id,
+            title=payload.titulo,
+            description=payload.descricao or "",
+            start=payload.inicio,
+            end=payload.fim,
+            timezone=payload.timezone or "America/Sao_Paulo",
+        )
+
+        return GoogleEventUpdateOut(
+            status="ok",
+            motivo=None,
+            event={
+                "id": updated.get("id"),
+                "htmlLink": updated.get("htmlLink"),
+                "calendar_id": payload.id_agenda or "primary",
+                "summary": updated.get("summary"),
+                "description": updated.get("description"),
+                "start": (updated.get("start") or {}).get("dateTime"),
+                "end": (updated.get("end") or {}).get("dateTime"),
+            },
+            detail=None,
+        )
+    except Exception as e:
+        return GoogleEventUpdateOut(
+            status="erro",
+            motivo="Falha ao atualizar evento no Google Calendar",
+            event=None,
+            detail={"error": str(e)},
+        )
