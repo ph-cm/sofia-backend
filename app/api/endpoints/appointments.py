@@ -81,15 +81,15 @@ class AppointmentAttachContextIn(BaseModel):
     user_id: int = Field(..., ge=1)
     calendar_id: str = "primary"
     event_id: str
-
-    conversation_id: str
-    contact_id: str
-    telefone_contato: Optional[str] = None
-
     start_datetime: str
     end_datetime: str
-    summary: Optional[str] = None
-    description: Optional[str] = None
+    summary: str
+    description: Optional[str] = ""
+
+    # CONTEXTO CHATWOOT (opcional)
+    conversation_id: Optional[int] = None
+    contact_id: Optional[int] = None
+    telefone: Optional[str] = None
     
 @router.post("/attach-context")
 def attach_context(payload: AppointmentAttachContextIn, db: Session = Depends(get_db)):
