@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-
+from fastapi import status
 from app.db.session import get_db
 from app.api.services.google_token_service import GoogleTokenService
 from app.api.services.google_calendar_service import google_calendar_service
@@ -38,7 +38,8 @@ def list_google_events(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.delete("/{event_id}")
+
+@router.delete("/{event_id}", status_code=status.HTTP_200_OK)
 def delete_google_event(
     event_id: str,
     user_id: int = Query(..., description="ID do usuário (tenant/profissional)"),
@@ -50,14 +51,12 @@ def delete_google_event(
         raise HTTPException(status_code=404, detail="Usuário não conectado ao Google")
 
     try:
-        google_calendar_service.delete_event(
-            token=token,
-            calendar_id=calendar_id,
-            event_id=event_id,
-        )
+        google_calendar_service.delete_event(db, token, calendar_id, event_id)
         return {"status": "deleted", "event_id": event_id, "calendar_id": calendar_id}
     except Exception as e:
+        # Se quiser melhorar depois: parsear e.status_code do Google
         raise HTTPException(status_code=400, detail=str(e))
+
 
 
 @router.post("/create", response_model=GoogleEventCreateOut)
@@ -107,12 +106,11 @@ def create_google_event(payload: GoogleEventCreateIn, db: Session = Depends(get_
 @router.patch("/update", response_model=GoogleEventUpdateOut)
 def update_google_event(payload: GoogleEventUpdateIn, db: Session = Depends(get_db)):
     try:
-        token = GoogleTokenService.get_by_user(db, payload.user_id)
-        if not token:
-            raise HTTPException(status_code=404, detail="Usuário não conectado ao Google")
+        # 1) garante token válido (faz refresh se necessário)
+        access_token = GoogleTokenService.get_valid_access_token(db, payload.user_id)
 
         updated = google_calendar_service.update_event(
-            token=token,
+            access_token=access_token,  # <- string
             calendar_id=payload.calendar_id or "primary",
             event_id=payload.event_id,
             title=payload.summary,

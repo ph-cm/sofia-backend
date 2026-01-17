@@ -63,17 +63,16 @@ class GoogleCalendarService:
         return free
     
     def update_event(
-        self,
-        token,
-        calendar_id: str,
-        event_id: str,
-        title: str,
-        description: str,
-        start: str,
-        end: str,
-        timezone: str
+    self,
+    token,
+    calendar_id: str,
+    event_id: str,
+    title: str,
+    description: str,
+    start: str,
+    end: str,
+    timezone: str
     ):
-
         url = f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events/{event_id}"
 
         headers = {
@@ -96,10 +95,17 @@ class GoogleCalendarService:
 
         response = requests.patch(url, json=body, headers=headers)
 
+        # 🔥 TOKEN EXPIRADO → REFRESH AUTOMÁTICO
+        if response.status_code == 401:
+            token = GoogleTokenService.refresh_access_token(token.db, token)
+            headers["Authorization"] = f"Bearer {token.google_access_token}"
+            response = requests.patch(url, json=body, headers=headers)
+
         if response.status_code not in (200, 201):
             raise Exception(f"Erro ao atualizar evento: {response.text}")
 
         return response.json()
+
     
     def list_events(self, token, calendar_id: str):
 
@@ -122,21 +128,14 @@ class GoogleCalendarService:
 
 
 
-    def delete_event(self, token, calendar_id: str, event_id: str):
-        url = GOOGLE_DELETE_EVENT_URL.format(
-            calendarId=calendar_id,
-            eventId=event_id
-        )
+    def delete_event(self, db, token, calendar_id: str, event_id: str):
+        url = GOOGLE_DELETE_EVENT_URL.format(calendarId=calendar_id, eventId=event_id)
 
-        headers = {
-            "Authorization": f"Bearer {token.google_access_token}"
-        }
-
+        headers = {"Authorization": f"Bearer {token.google_access_token}"}
         response = requests.delete(url, headers=headers)
 
-        # token expirado → tentar refresh
         if response.status_code == 401:
-            token = GoogleTokenService.refresh_access_token(self.db, token)
+            token = GoogleTokenService.refresh_access_token(db, token)
             headers["Authorization"] = f"Bearer {token.google_access_token}"
             response = requests.delete(url, headers=headers)
 
@@ -144,5 +143,6 @@ class GoogleCalendarService:
             raise Exception(f"Erro ao deletar evento: {response.text}")
 
         return True
+
 
 google_calendar_service = GoogleCalendarService()
