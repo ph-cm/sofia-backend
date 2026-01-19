@@ -16,7 +16,7 @@ class UserService:
         user = User(
             email=data.email,
             password_hash=get_password_hash(data.password),
-
+            inbox_id=data.inbox_id,
             nome=data.nome,
             phone_channel=data.phone_channel,
             calendar_id=data.calendar_id,
@@ -24,6 +24,9 @@ class UserService:
             duracao_consulta=data.duracao_consulta,
             valor_consulta=data.valor_consulta,
             ativo=data.ativo,
+            
+            bio_profissional=getattr(data, 'bio_profissional', None),
+            especialidade=getattr(data, 'especialidade', None),
         )
 
         db.add(user)

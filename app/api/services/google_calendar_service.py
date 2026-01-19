@@ -90,10 +90,10 @@ class GoogleCalendarService:
         response = requests.patch(url, json=body, headers=headers)
         
         # 🔥 TOKEN EXPIRADO → REFRESH AUTOMÁTICO
-        if response.status_code == 401:
-            token = GoogleTokenService.refresh_access_token(token.db, token)
-            headers["Authorization"] = f"Bearer {token.google_access_token}"
-            response = requests.patch(url, json=body, headers=headers)
+        # if response.status_code == 401:
+        #     token = GoogleTokenService.refresh_access_token(token.db, token)
+        #     headers["Authorization"] = f"Bearer {token.google_access_token}"
+        #     response = requests.patch(url, json=body, headers=headers)
 
         if response.status_code not in (200, 201):
             raise Exception(f"Erro ao atualizar evento: {response.text}")

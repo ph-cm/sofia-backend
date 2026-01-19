@@ -21,8 +21,9 @@ class UserCreate(BaseModel):
     duracao_consulta: Optional[int] = 60
     valor_consulta: Optional[int] = 0
     ativo: Optional[bool] = True
-
-
+    
+    bio_profissional: Optional[str] = None
+    especialidade: Optional[str] = None
 
 # =========================
 # Login (inalterado)
@@ -65,6 +66,7 @@ class LoginResponse(BaseModel):
 class UserUpdate(BaseModel):
     nome: Optional[str] = None
     phone_channel: Optional[str] = None
+    inbox_id: Optional[int] = None   # 🔥
     calendar_id: Optional[str] = None
     timezone: Optional[str] = None
     duracao_consulta: Optional[int] = None
