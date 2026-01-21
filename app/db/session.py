@@ -2,10 +2,15 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from app.core.config import settings
 
+import re
+from app.core.config import settings
+
+safe_url = re.sub(r":([^:@/]+)@", ":***@", settings.DATABASE_URL)
+print("USING DATABASE_URL =", safe_url)
+
 engine = create_engine(
     settings.DATABASE_URL,
     pool_pre_ping=True,
-    pool_recycle=1800
 )
 
 
