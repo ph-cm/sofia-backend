@@ -43,6 +43,15 @@ app.include_router(appointments.router)
 def read_root():
     return {"app_name": app.title, "environment": settings.ENV}
 
+import logging, re
+logger = logging.getLogger("startup")
+
+@app.on_event("startup")
+def startup_log():
+    from app.core.config import settings
+    safe = re.sub(r":([^:@/]+)@", ":***@", settings.DATABASE_URL)
+    logger.warning("STARTUP DATABASE_URL = %s", safe)
+
 # Incluindo as rotas
 # app.include_router(users.router, prefix="/api/users", tags=["users"])
 # app.include_router(whatsapp.router, prefix="/api/whatsapp", tags=["whatsapp"])
