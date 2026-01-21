@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     # ----------------------------------------------------
     # A URL completa é a forma preferida para conexão
     DATABASE_URL: str
-    FRONTEND_BASE_URL: str
+    FRONTEND_BASE_URL: str = "http://localhost:5173"
     # Detalhes opcionais, caso precise montar a URL em outro lugar
     DB_USER: str
     DB_PASSWORD: str
