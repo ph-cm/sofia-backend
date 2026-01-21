@@ -52,7 +52,6 @@ settings = Settings()
 
 N8N_WEBHOOK_URL: str
 
-FRONTEND_BASE_URL: str = "http://localhost:5173"
 
 
 # Exemplo de uso:
