@@ -23,10 +23,10 @@ class UserService:
             timezone=data.timezone,
             duracao_consulta=data.duracao_consulta,
             valor_consulta=data.valor_consulta,
-            ativo=data.ativo,
+            ativo=data.ativo
             
-            bio_profissional=getattr(data, 'bio_profissional', None),
-            especialidade=getattr(data, 'especialidade', None),
+            # bio_profissional=getattr(data, 'bio_profissional', None),
+            # especialidade=getattr(data, 'especialidade', None),
         )
 
         db.add(user)
