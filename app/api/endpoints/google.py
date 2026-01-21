@@ -1,8 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
-
+from urllib.parse import urlencode
+from starlette.responses import RedirectResponse
+from app.core.config import settings
 from app.api.services.google_service import GoogleAuthService
 from app.db.session import get_db
+
 from app.api.services.google_token_service import (
     GoogleTokenService,
     GoogleTokenNotFound,
@@ -36,7 +39,11 @@ def google_callback(code: str, state: str, db: Session = Depends(get_db)):
         scope=tokens.get("scope"),
     )
 
-    return {"status": "connected", "user_id": user_id}
+    # return {"status": "connected", "user_id": user_id}
+     # ✅ redireciona pro frontend após conectar
+    qs = urlencode({"user_id": user_id, "connected": "1"})
+    frontend_url = f"{settings.FRONTEND_BASE_URL}/oauth/google/callback?{qs}"
+    return RedirectResponse(url=frontend_url, status_code=302)
 
 
 @router.get("/refresh")
@@ -113,3 +120,19 @@ def get_access_token_for_n8n(
             status_code=500,
             detail=f"Erro interno ao obter token Google: {str(e)}",
         )
+
+@router.get("/status")
+def google_status(user_id: int = Query(...), db: Session = Depends(get_db)):
+    token_row = GoogleTokenService.get_by_user(db, user_id)
+    if not token_row:
+        return {"connected": False}
+
+    expiry = token_row.google_token_expiry
+    if expiry and expiry.tzinfo is None:
+        expiry = expiry.replace(tzinfo=timezone.utc)
+
+    # “connected” = tem token. Se quiser, você pode incluir expiração
+    return {
+        "connected": True,
+        "expiry": expiry.isoformat() if expiry else None,
+    }
