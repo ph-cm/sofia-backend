@@ -26,5 +26,5 @@ class User(Base):
     email = Column(String, unique=True, index=True, nullable=True)
     password_hash = Column(String, nullable=True)
 
-    bio_profissional = Column(String, nullable=True)
-    especialidade = Column(String, nullable=True)
+    # bio_profissional = Column(String, nullable=True)
+    # especialidade = Column(String, nullable=True)
