@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     GOOGLE_REDIRECT_URI: str
     GOOGLE_SCOPES: str
     
+    FRONTEND_BASE_URL: str = "http://localhost:5173"
 # Cria uma instância única da classe Settings para ser importada em toda a aplicação
 settings = Settings()
 
