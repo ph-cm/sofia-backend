@@ -6,12 +6,10 @@ import requests
 
 from sqlalchemy.orm import Session
 
-# ✅ ajuste esses imports para os seus paths reais
-from app.api.models.user import User  # <- ajuste se o model tiver outro nome/local
-#from app.api.services.google_token_service import GoogleTokenService  # <- se já existir, use
-# Se não existir, a função fallback está abaixo.
+from app.api.services.google_token_service import GoogleTokenService  # ✅ usa o seu service existente
 
 GOOGLE_CAL_BASE = "https://www.googleapis.com/calendar/v3"
+
 
 def _iso(dt: datetime) -> str:
     # garante timezone
@@ -19,18 +17,16 @@ def _iso(dt: datetime) -> str:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.isoformat()
 
+
 def _normalize_google_event(item: Dict[str, Any]) -> Dict[str, Any]:
-    # Google: all-day => start.date / end.date (end é exclusivo)
     start_obj = item.get("start", {}) or {}
     end_obj = item.get("end", {}) or {}
 
     all_day = "date" in start_obj
 
     if all_day:
-        # padroniza para ISO (00:00) mas mantém "allDay"
-        start = start_obj.get("date")
-        end = end_obj.get("date")
-        # se vier só YYYY-MM-DD, o front ainda consegue tratar.
+        start = start_obj.get("date")  # YYYY-MM-DD
+        end = end_obj.get("date")      # YYYY-MM-DD (exclusive)
         start_out = f"{start}T00:00:00"
         end_out = f"{end}T00:00:00"
     else:
@@ -47,6 +43,7 @@ def _normalize_google_event(item: Dict[str, Any]) -> Dict[str, Any]:
         "description": item.get("description"),
     }
 
+
 def list_events_range(
     db: Session,
     user_id: int,
@@ -56,10 +53,9 @@ def list_events_range(
     telefone: Optional[str] = None,
     max_results: int = 250,
 ) -> List[Dict[str, Any]]:
-    # 1) pega access_token válido
-    token = _get_access_token_fallback(db, user_id)
+    # ✅ aqui é o ponto principal: usa o token service que já funciona
+    token = GoogleTokenService.get_valid_access_token(db=db, user_id=user_id)
 
-    # 2) monta query
     params: Dict[str, Any] = {
         "singleEvents": "true",
         "orderBy": "startTime",
@@ -70,8 +66,7 @@ def list_events_range(
     if time_max:
         params["timeMax"] = _iso(time_max)
 
-    # filtro livre do Google (q) — funciona bem para telefone em summary/description
-    # (se o seu uso for forte, vale manter como filtro opcional do backend)
+    # filtro de texto do Google Calendar (summary/description etc)
     if telefone:
         params["q"] = telefone
 
@@ -79,8 +74,9 @@ def list_events_range(
     headers = {"Authorization": f"Bearer {token}"}
 
     res = requests.get(url, headers=headers, params=params, timeout=30)
+
+    # ✅ erro amigável
     if res.status_code >= 400:
-        # retorna erro “explicável”
         try:
             payload = res.json()
         except Exception:
@@ -89,24 +85,4 @@ def list_events_range(
 
     data = res.json()
     items = data.get("items") or []
-
     return [_normalize_google_event(it) for it in items]
-
-# -------------------------------------------------------
-# Fallback: se você NÃO tiver get_valid_access_token pronto
-# -------------------------------------------------------
-def _get_access_token_fallback(db: Session, user_id: int) -> str:
-    """
-    ✅ Sem alterar nada existente: tenta só ler token já salvo.
-    Se você já tem refresh automático em outro lugar, substitua por ele.
-    """
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise RuntimeError("user_id não encontrado")
-
-    # ajuste os nomes conforme seu model real
-    token = getattr(user, "google_access_token", None)
-    if not token:
-        raise RuntimeError("Google não conectado (sem google_access_token)")
-
-    return token
