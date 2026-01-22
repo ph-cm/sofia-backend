@@ -35,3 +35,12 @@ class GoogleEventUpdateOut(BaseModel):
     motivo: Optional[str] = None
     event: Optional[Dict[str, Any]] = None
     detail: Optional[Dict[str, Any]] = None
+    
+class GoogleEventOut(BaseModel):
+    id: str
+    title: str
+    start: str
+    end: str
+    allDay: bool = False
+    location: Optional[str] = None
+    description: Optional[str] = None
