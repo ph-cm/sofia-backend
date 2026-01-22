@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 # ✅ ajuste esses imports para os seus paths reais
 from app.api.models.user import User  # <- ajuste se o model tiver outro nome/local
-from app.api.services.google_oauth import get_valid_access_token  # <- se já existir, use
+#from app.api.services.google_token_service import GoogleTokenService  # <- se já existir, use
 # Se não existir, a função fallback está abaixo.
 
 GOOGLE_CAL_BASE = "https://www.googleapis.com/calendar/v3"
