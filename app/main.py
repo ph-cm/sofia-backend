@@ -6,7 +6,7 @@ from app.core.config import settings
 from fastapi.middleware.cors import CORSMiddleware
 
 # Importe seus roteadores (endpoints)
-from app.api.endpoints import google,  auth, google_debug, disponibilidade, google_calendar_availability, google_calendar_events, conversation_context, resolve_user, users, tenants, appointments, google_calendar_mirror
+from app.api.endpoints import google,  auth, google_debug, disponibilidade, google_calendar_availability, google_calendar_events, conversation_context, resolve_user, users, tenants, appointments, google_calendar_mirror, tenant_integration
 
 
 app = FastAPI(
@@ -39,6 +39,7 @@ app.include_router(users.router)
 app.include_router(tenants.router)
 app.include_router(appointments.router)
 app.include_router(google_calendar_mirror.router)
+app.include_router(tenant_integration.router)
 
 # Exemplo: Usando uma variável de configuração
 @app.get("/")
