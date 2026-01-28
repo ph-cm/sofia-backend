@@ -2,6 +2,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 class BindChatwootIn(BaseModel):
+    user_id: int
     chatwoot_account_id: int
     chatwoot_inbox_id: int
     chatwoot_inbox_identifier: str

@@ -14,22 +14,17 @@ from app.api.services.tenant_integration_service import TenantIntegrationService
 router = APIRouter(prefix="/integrations", tags=["Integrations"])
 
 
-@router.post("/chatwoot/bind", response_model=BindChatwootOut)
-def bind_chatwoot(
-    payload: BindChatwootIn,
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
+@router.post("/chatwoot/bind", response_model=BindChatwootOut, dependencies=[Depends(verify_n8n_api_key)])
+def bind_chatwoot(payload: BindChatwootIn, db: Session = Depends(get_db)):
     integration = TenantIntegrationService.bind_chatwoot(
         db=db,
-        user_id=current_user["id"],
+        user_id=payload.user_id,  # 🔥 vem do payload
         chatwoot_account_id=payload.chatwoot_account_id,
         chatwoot_inbox_id=payload.chatwoot_inbox_id,
         chatwoot_inbox_identifier=payload.chatwoot_inbox_identifier,
         evolution_instance_id=payload.evolution_instance_id,
         evolution_phone=payload.evolution_phone,
     )
-
     return BindChatwootOut(
         ok=True,
         user_id=integration.user_id,
