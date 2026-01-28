@@ -47,16 +47,22 @@ def resolve_tenant(payload: ResolveTenantIn, db: Session = Depends(get_db)):
     return ResolveTenantOut(user_id=user_id)
 
 
+from fastapi import Body
+from typing import Any, Dict
+
 @router.post(
     "/chatwoot/events",
     dependencies=[Depends(verify_n8n_api_key)],
 )
-async def chatwoot_events(request: Request, db: Session = Depends(get_db)):
-    payload = await request.json()
-
+async def chatwoot_events(
+    payload: Dict[str, Any] = Body(...),
+    db: Session = Depends(get_db),
+):
+    # 1) filtra eventos que você não quer processar
     if payload.get("event") != "message_created":
-        return {"ok": True, "ignored": True}
+        return {"ok": True, "ignored": True, "reason": "not_message_created"}
 
+    # 2) se você só quer saída do agente (ou seja, mensagem enviada pelo bot/agente)
     if payload.get("message_type") != "outgoing":
         return {"ok": True, "ignored": True, "reason": "not_outgoing"}
 
@@ -69,13 +75,14 @@ async def chatwoot_events(request: Request, db: Session = Depends(get_db)):
     content = payload.get("content")
 
     if not inbox_id or not account_id:
-        raise HTTPException(status_code=400, detail="Missing inbox_id or account_id")
+        raise HTTPException(status_code=400, detail="Missing inbox.id or sender.account.id")
 
     user_id = TenantIntegrationService.resolve_user_id(
-        db, chatwoot_account_id=account_id, chatwoot_inbox_id=inbox_id
+        db=db,
+        chatwoot_account_id=account_id,
+        chatwoot_inbox_id=inbox_id,
     )
 
-    # FASE EVOLUTION: aqui entraremos com envio via provider
     return {
         "ok": True,
         "user_id": user_id,
