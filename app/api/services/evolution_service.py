@@ -1,6 +1,7 @@
 import requests
 from app.core.config import settings
 
+
 class EvolutionService:
     @staticmethod
     def _headers():
@@ -15,9 +16,14 @@ class EvolutionService:
         return r.json()
 
     @staticmethod
-    def create_instance(instance_name: str):
+    def create_instance(instance_name: str, number: str, qrcode: bool, integration: str):
         url = f"{settings.EVOLUTION_BASE_URL.rstrip('/')}/instance/create"
-        payload = {"instanceName": instance_name}
+        payload = {
+            "instanceName": instance_name,
+            "number": number,
+            "qrcode": qrcode,
+            "integration": integration,
+        }
         r = requests.post(url, json=payload, headers=EvolutionService._headers(), timeout=30)
         r.raise_for_status()
         return r.json()
