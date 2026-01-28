@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     BASE_URL: str
     N8N_API_KEY: str
+    CHATWOOT_BASE_URL: str
+    CHATWOOT_API_TOKEN: str
     CHATWOOT_WEBHOOK_SECRET: str
     # ----------------------------------------------------
     # 2. CONFIGURAÇÕES DO BANCO DE DADOS
