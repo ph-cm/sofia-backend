@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     EVOLUTION_BASE_URL: str
     EVOLUTION_API_KEY: str
     EVOLUTION_WEBHOOK_SECRET: str
+    
     # ----------------------------------------------------
     # 2. CONFIGURAÇÕES DO BANCO DE DADOS
     # ----------------------------------------------------
