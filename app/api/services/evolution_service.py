@@ -95,34 +95,33 @@ class EvolutionService:
         raise last_exc or Exception("No webhook endpoint matched")
 
     @staticmethod
-    def set_webhook(instance_name: str, url: str, events: list[str]):
+    def set_webhook(instance_name: str, url: str, events: list[str], enabled: bool = True,
+                    webhook_by_events: bool = False, webhook_base64: bool = False):
+        # ✅ payload conforme docs v2
         payload = {
-            "instanceName": instance_name,
+            "enabled": enabled,
             "url": url,
+            "webhook_by_events": webhook_by_events,
+            "webhook_base64": webhook_base64,
             "events": events,
         }
 
-        # AQUI está o pulo do gato:
-        # Evolução/variações comuns em builds diferentes
+        # ✅ endpoint correto no v2: POST /webhook/instance
         candidate_paths = [
-            "/webhook/set",
-            "/webhook/setWebhook",
-            "/webhook",
-            "/webhook/set/" + instance_name,          # alguns builds colocam instance no path
-            "/webhook/setWebhook/" + instance_name,
+            f"/webhook/instance/{instance_name}",                 # alguns builds fazem assim
+            "/webhook/instance",                                  # docs v2 mostram esse
+            "/webhook/instance?instanceName=" + instance_name,    # fallback
         ]
 
         return EvolutionService._try_post(candidate_paths, json=payload, timeout=30)
 
     @staticmethod
     def find_webhook(instance_name: str):
-        # Algumas versões usam find; outras listam por instanceName
+        # ✅ docs v2: GET /webhook/find/[instance]
         candidate_paths = [
-            "/webhook/find",
-            "/webhook/findWebhook",
-            "/webhook",
+            f"/webhook/find/{instance_name}",
+            "/webhook/find",  # fallback (se existir) usando query
         ]
-        # tenta com params
         return EvolutionService._try_get(candidate_paths, params={"instanceName": instance_name}, timeout=20)
 
 

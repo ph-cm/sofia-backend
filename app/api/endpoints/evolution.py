@@ -33,11 +33,12 @@ class ConnectOut(BaseModel):
     evolution_raw: Dict[str, Any]
 
 class SetWebhookIn(BaseModel):
-    instance_name: str = Field(..., min_length=2, max_length=64, examples=["tenant_1"])
+    instance_name: str = Field(..., examples=["tenant_1"])
     url: str = Field(..., examples=["https://webhook.site/248aa640-f03f-42d2-abb9-d0779f3918ca"])
-    # deixe livre pra testar; depois a gente “trava” num set mínimo
+    enabled: bool = True
+    webhook_by_events: bool = False
+    webhook_base64: bool = False
     events: List[str] = Field(default_factory=lambda: ["MESSAGES_UPSERT", "CONNECTION_UPDATE"])
-
 
 class WebhookOut(BaseModel):
     ok: bool
@@ -153,13 +154,16 @@ def evo_restart_instance(instance_name: str):
         raise HTTPException(status_code=502, detail=f"Evolution error: {str(e)}")
 
 
-@router.post("/webhook/set", response_model=WebhookOut, dependencies=[Depends(verify_n8n_api_key)])
+@router.post("/webhook/set", dependencies=[Depends(verify_n8n_api_key)])
 def evo_webhook_set(payload: SetWebhookIn):
     try:
         raw = EvolutionService.set_webhook(
             instance_name=payload.instance_name,
             url=payload.url,
             events=payload.events,
+            enabled=payload.enabled,
+            webhook_by_events=payload.webhook_by_events,
+            webhook_base64=payload.webhook_base64,
         )
         return {"ok": True, "instance_name": payload.instance_name, "evolution_raw": raw}
     except Exception as e:
