@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from typing import Literal, Optional, Any, Dict
+from typing import List, Literal, Optional, Any, Dict
 
 from app.core.security import verify_n8n_api_key
 from app.api.services.evolution_service import EvolutionService
@@ -32,6 +32,17 @@ class ConnectOut(BaseModel):
     qrcode_base64: Optional[str] = None
     evolution_raw: Dict[str, Any]
 
+class SetWebhookIn(BaseModel):
+    instance_name: str = Field(..., min_length=2, max_length=64, examples=["tenant_1"])
+    url: str = Field(..., examples=["https://webhook.site/248aa640-f03f-42d2-abb9-d0779f3918ca"])
+    # deixe livre pra testar; depois a gente “trava” num set mínimo
+    events: List[str] = Field(default_factory=lambda: ["MESSAGES_UPSERT", "CONNECTION_UPDATE"])
+
+
+class WebhookOut(BaseModel):
+    ok: bool
+    instance_name: str
+    evolution_raw: Dict[str, Any]
 
 @router.get("/info", dependencies=[Depends(verify_n8n_api_key)])
 def evo_info():
@@ -140,27 +151,6 @@ def evo_restart_instance(instance_name: str):
         return EvolutionService.restart_instance(instance_name)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Evolution error: {str(e)}")
-
-from pydantic import BaseModel, Field
-from typing import List, Optional, Any, Dict
-from fastapi import APIRouter, Depends, HTTPException
-from app.core.security import verify_n8n_api_key
-from app.api.services.evolution_service import EvolutionService
-
-router = APIRouter(prefix="/evolution", tags=["Evolution"])
-
-
-class SetWebhookIn(BaseModel):
-    instance_name: str = Field(..., min_length=2, max_length=64, examples=["tenant_1"])
-    url: str = Field(..., examples=["https://webhook.site/248aa640-f03f-42d2-abb9-d0779f3918ca"])
-    # deixe livre pra testar; depois a gente “trava” num set mínimo
-    events: List[str] = Field(default_factory=lambda: ["MESSAGES_UPSERT", "CONNECTION_UPDATE"])
-
-
-class WebhookOut(BaseModel):
-    ok: bool
-    instance_name: str
-    evolution_raw: Dict[str, Any]
 
 
 @router.post("/webhook/set", response_model=WebhookOut, dependencies=[Depends(verify_n8n_api_key)])

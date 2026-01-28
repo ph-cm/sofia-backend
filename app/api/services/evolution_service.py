@@ -51,12 +51,6 @@ class EvolutionService:
         return r.json()
 
 
-
-import requests
-from app.core.config import settings
-
-
-class EvolutionService:
     @staticmethod
     def _headers():
         return {"apikey": settings.EVOLUTION_API_KEY}
