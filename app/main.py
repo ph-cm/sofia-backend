@@ -10,7 +10,7 @@ from app.api.endpoints import google,  auth, google_debug, disponibilidade, goog
 from app.api.endpoints import debug_auth
 from app.api.endpoints import tenant_provision
 from app.api.endpoints import evolution
-
+from app.api.endpoints import evolution_webhook
 
 app = FastAPI(
     title="SaaS Secretaria Inteligente",
@@ -46,6 +46,7 @@ app.include_router(tenant_integration.router)
 app.include_router(debug_auth.router)
 app.include_router(tenant_provision.router)
 app.include_router(evolution.router)
+app.include_router(evolution_webhook.router)
 
 # Exemplo: Usando uma variável de configuração
 @app.get("/")
