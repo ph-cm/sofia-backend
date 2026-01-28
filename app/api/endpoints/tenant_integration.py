@@ -49,15 +49,17 @@ def resolve_tenant(payload: ResolveTenantIn, db: Session = Depends(get_db)):
 
 from fastapi import Body
 from typing import Any, Dict
+from fastapi import Query
+from app.core.config import settings
 
-@router.post(
-    "/chatwoot/events",
-    dependencies=[Depends(verify_n8n_api_key)],
-)
+@router.post("/chatwoot/events")
 async def chatwoot_events(
-    payload: Dict[str, Any] = Body(...),
+    payload: dict = Body(...),
+    secret: str = Query(...),
     db: Session = Depends(get_db),
 ):
+    if secret != settings.CHATWOOT_WEBHOOK_SECRET:
+        raise HTTPException(status_code=401, detail="Invalid webhook secret")
     # 1) filtra eventos que você não quer processar
     if payload.get("event") != "message_created":
         return {"ok": True, "ignored": True, "reason": "not_message_created"}
