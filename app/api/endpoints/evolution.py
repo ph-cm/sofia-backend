@@ -55,29 +55,31 @@ def evo_create_instance(payload: CreateInstanceIn):
         raise HTTPException(status_code=502, detail=f"Evolution error: {str(e)}")
 
 
+from fastapi import Query
+
 @router.post(
     "/instances/{instance_name}/connect",
     response_model=ConnectOut,
     dependencies=[Depends(verify_n8n_api_key)],
 )
-def evo_connect_instance(instance_name: str):
+def evo_connect_instance(
+    instance_name: str,
+    number: str = Query(..., description="Ex: 553499190547 (sem +)"),
+):
     try:
-        raw = EvolutionService.connect_instance(instance_name)
+        raw = EvolutionService.connect_instance(instance_name, number)
 
-        # tolerante: o Evolution pode retornar qrcode em chaves diferentes
-        qrcode = (
-            raw.get("qrcode")
-            or raw.get("qrCode")
-            or raw.get("qr_code")
-            or raw.get("base64")  # às vezes vem assim
-        )
-        qrcode_base64 = raw.get("qrcode_base64") or raw.get("qrCodeBase64") or raw.get("qrcodeBase64")
+        # pega o QR da resposta REAL (no seu caso ele vem em raw["qrcode"]["base64"])
+        qr_base64 = None
+        if isinstance(raw.get("qrcode"), dict):
+            qr_base64 = raw["qrcode"].get("base64")
+        elif isinstance(raw.get("qrcode"), str):
+            qr_base64 = raw.get("qrcode")
 
         return {
             "ok": True,
             "instance_name": instance_name,
-            "qrcode": qrcode if isinstance(qrcode, str) else None,
-            "qrcode_base64": qrcode_base64 if isinstance(qrcode_base64, str) else None,
+            "qrcode_base64": qr_base64,
             "evolution_raw": raw,
         }
     except Exception as e:
@@ -129,5 +131,12 @@ def evo_instance_qrcode(instance_name: str):
             "qrcode_base64": qrcode_base64 if isinstance(qrcode_base64, str) else None,
             "evolution_raw": raw,
         }
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Evolution error: {str(e)}")
+
+@router.post("/instances/{instance_name}/restart", dependencies=[Depends(verify_n8n_api_key)])
+def evo_restart_instance(instance_name: str):
+    try:
+        return EvolutionService.restart_instance(instance_name)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Evolution error: {str(e)}")

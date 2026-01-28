@@ -29,17 +29,17 @@ class EvolutionService:
         return r.json()
 
     @staticmethod
-    def connect_instance(instance_name: str):
-        url = f"{settings.EVOLUTION_BASE_URL.rstrip('/')}/instance/connect"
-        payload = {"instanceName": instance_name}
-        r = requests.post(url, json=payload, headers=EvolutionService._headers(), timeout=30)
+    def connect_instance(instance_name: str, number: str):
+        url = f"{settings.EVOLUTION_BASE_URL.rstrip('/')}/instance/connect/{instance_name}"
+        params = {"number": number}
+        r = requests.get(url, params=params, headers=EvolutionService._headers(), timeout=30)
         r.raise_for_status()
         return r.json()
 
     @staticmethod
     def connection_state(instance_name: str):
-        url = f"{settings.EVOLUTION_BASE_URL.rstrip('/')}/instance/connectionState"
-        params = {"instanceName": instance_name}
-        r = requests.get(url, params=params, headers=EvolutionService._headers(), timeout=20)
+        url = f"{settings.EVOLUTION_BASE_URL.rstrip('/')}/instance/connectionState/{instance_name}"
+        r = requests.get(url, headers=EvolutionService._headers(), timeout=20)
         r.raise_for_status()
         return r.json()
+
