@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.endpoints import google,  auth, google_debug, disponibilidade, google_calendar_availability, google_calendar_events, conversation_context, resolve_user, users, tenants, appointments, google_calendar_mirror, tenant_integration
 from app.api.endpoints import debug_auth
 from app.api.endpoints import tenant_provision
+from app.api.endpoints import evolution
 
 
 app = FastAPI(
@@ -44,6 +45,7 @@ app.include_router(google_calendar_mirror.router)
 app.include_router(tenant_integration.router)
 app.include_router(debug_auth.router)
 app.include_router(tenant_provision.router)
+app.include_router(evolution.router)
 
 # Exemplo: Usando uma variável de configuração
 @app.get("/")
