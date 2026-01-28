@@ -43,3 +43,10 @@ class EvolutionService:
         r.raise_for_status()
         return r.json()
 
+    @staticmethod
+    def restart_instance(instance_name: str):
+        url = f"{settings.EVOLUTION_BASE_URL.rstrip('/')}/instance/restart/{instance_name}"
+        r = requests.post(url, headers=EvolutionService._headers(), timeout=30)
+        r.raise_for_status()
+        return r.json()
+
