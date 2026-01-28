@@ -50,19 +50,85 @@ class EvolutionService:
         r.raise_for_status()
         return r.json()
 
+
+
+import requests
+from app.core.config import settings
+
+
+class EvolutionService:
+    @staticmethod
+    def _headers():
+        return {"apikey": settings.EVOLUTION_API_KEY}
+
+    @staticmethod
+    def _base():
+        return settings.EVOLUTION_BASE_URL.rstrip("/")
+
+    @staticmethod
+    def _try_post(paths: list[str], json: dict, timeout: int = 30):
+        last_exc = None
+        for p in paths:
+            url = f"{EvolutionService._base()}{p}"
+            try:
+                r = requests.post(url, json=json, headers=EvolutionService._headers(), timeout=timeout)
+                # se for 404/405 tenta o próximo
+                if r.status_code in (404, 405):
+                    last_exc = Exception(f"{r.status_code} for {url}: {r.text[:300]}")
+                    continue
+                r.raise_for_status()
+                return r.json()
+            except Exception as e:
+                last_exc = e
+                continue
+        raise last_exc or Exception("No webhook endpoint matched")
+
+    @staticmethod
+    def _try_get(paths: list[str], params: dict | None = None, timeout: int = 20):
+        last_exc = None
+        for p in paths:
+            url = f"{EvolutionService._base()}{p}"
+            try:
+                r = requests.get(url, params=params, headers=EvolutionService._headers(), timeout=timeout)
+                if r.status_code in (404, 405):
+                    last_exc = Exception(f"{r.status_code} for {url}: {r.text[:300]}")
+                    continue
+                r.raise_for_status()
+                return r.json()
+            except Exception as e:
+                last_exc = e
+                continue
+        raise last_exc or Exception("No webhook endpoint matched")
+
     @staticmethod
     def set_webhook(instance_name: str, url: str, events: list[str]):
-        endpoint = f"{settings.EVOLUTION_BASE_URL.rstrip('/')}/webhook/set"
         payload = {
             "instanceName": instance_name,
-            "webhook": {
-                "enabled": True,
-                "url": url,
-                "webhookByEvents": True,
-                "events": events,
-            },
+            "url": url,
+            "events": events,
         }
-        r = requests.post(endpoint, json=payload, headers=EvolutionService._headers(), timeout=20)
-        r.raise_for_status()
-        return r.json()
+
+        # AQUI está o pulo do gato:
+        # Evolução/variações comuns em builds diferentes
+        candidate_paths = [
+            "/webhook/set",
+            "/webhook/setWebhook",
+            "/webhook",
+            "/webhook/set/" + instance_name,          # alguns builds colocam instance no path
+            "/webhook/setWebhook/" + instance_name,
+        ]
+
+        return EvolutionService._try_post(candidate_paths, json=payload, timeout=30)
+
+    @staticmethod
+    def find_webhook(instance_name: str):
+        # Algumas versões usam find; outras listam por instanceName
+        candidate_paths = [
+            "/webhook/find",
+            "/webhook/findWebhook",
+            "/webhook",
+        ]
+        # tenta com params
+        return EvolutionService._try_get(candidate_paths, params={"instanceName": instance_name}, timeout=20)
+
 
