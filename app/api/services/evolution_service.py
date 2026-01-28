@@ -53,7 +53,6 @@ class EvolutionService:
     @staticmethod
     def set_webhook(instance_name: str, url: str, events: list[str]):
         endpoint = f"{settings.EVOLUTION_BASE_URL.rstrip('/')}/webhook/set"
-
         payload = {
             "instanceName": instance_name,
             "webhook": {
@@ -63,12 +62,7 @@ class EvolutionService:
                 "events": events,
             },
         }
-
-        r = requests.post(
-            endpoint,
-            json=payload,
-            headers=EvolutionService._headers(),
-            timeout=20,
-        )
+        r = requests.post(endpoint, json=payload, headers=EvolutionService._headers(), timeout=20)
         r.raise_for_status()
         return r.json()
+

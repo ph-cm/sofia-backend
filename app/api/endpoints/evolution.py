@@ -140,3 +140,23 @@ def evo_restart_instance(instance_name: str):
         return EvolutionService.restart_instance(instance_name)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Evolution error: {str(e)}")
+
+from pydantic import BaseModel
+from typing import List
+
+class SetWebhookIn(BaseModel):
+    instance_name: str
+    url: str
+    events: List[str]
+
+@router.post("/webhook/set", dependencies=[Depends(verify_n8n_api_key)])
+def evo_set_webhook(payload: SetWebhookIn):
+    try:
+        raw = EvolutionService.set_webhook(
+            instance_name=payload.instance_name,
+            url=payload.url,
+            events=payload.events,
+        )
+        return {"ok": True, "evolution_raw": raw}
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Evolution error: {str(e)}")
