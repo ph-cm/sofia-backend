@@ -8,14 +8,61 @@ router = APIRouter(prefix="/webhooks/evolution", tags=["Evolution Webhooks"])
 
 
 def extract_instance_name(payload: Dict[str, Any]) -> Optional[str]:
-    # tenta achar instanceName nos lugares mais comuns
-    return (
-        payload.get("instanceName")
-        or payload.get("instance_name")
-        or (payload.get("instance") or {}).get("instanceName")
-        or (payload.get("instance") or {}).get("instance_name")
-    )
+    inst = payload.get("instance")
 
+    # seu caso real: string "tenant_1"
+    if isinstance(inst, str) and inst.strip():
+        return inst.strip()
+
+    # alguns builds: dict
+    if isinstance(inst, dict):
+        name = inst.get("instanceName") or inst.get("name")
+        if isinstance(name, str) and name.strip():
+            return name.strip()
+
+    # fallback: dentro de data
+    data = payload.get("data")
+    if isinstance(data, dict):
+        name = data.get("instanceName") or data.get("instance")
+        if isinstance(name, str) and name.strip():
+            return name.strip()
+
+    return None
+
+
+def extract_remote_jid(payload: Dict[str, Any]) -> Optional[str]:
+    data = payload.get("data")
+    if isinstance(data, dict):
+        key = data.get("key")
+        if isinstance(key, dict):
+            jid = key.get("remoteJid")
+            if isinstance(jid, str) and jid.strip():
+                return jid.strip()
+    return None
+
+
+def extract_text(payload: Dict[str, Any]) -> Optional[str]:
+    data = payload.get("data")
+    if not isinstance(data, dict):
+        return None
+
+    msg = data.get("message")
+    if not isinstance(msg, dict):
+        return None
+
+    # texto simples
+    conv = msg.get("conversation")
+    if isinstance(conv, str) and conv.strip():
+        return conv.strip()
+
+    # outro formato comum
+    ext = msg.get("extendedTextMessage")
+    if isinstance(ext, dict):
+        txt = ext.get("text")
+        if isinstance(txt, str) and txt.strip():
+            return txt.strip()
+
+    return None
 
 def extract_message_text(payload: Dict[str, Any]) -> Optional[str]:
     """
