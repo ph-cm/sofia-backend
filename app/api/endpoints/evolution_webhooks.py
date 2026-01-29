@@ -58,7 +58,12 @@ async def evolution_webhook(event: str, request: Request):
     payload: Dict[str, Any] = await request.json()
 
     print("EVOLUTION_WEBHOOK:", event)
-
+    print("====== EVOLUTION WEBHOOK ======")
+    print("EVENT:", event)
+    print("PAYLOAD:")
+    print(payload)
+    print("================================")
+    
     # só processa mensagem aqui (o resto você pode logar/ignorar)
     if event != "messages-upsert":
         return {"ok": True, "event": event}
