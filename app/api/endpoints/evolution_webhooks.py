@@ -10,6 +10,21 @@ from app.api.services.tenant_service import TenantService
 router = APIRouter(prefix="/webhooks/evolution", tags=["Evolution Webhooks"])
 
 
+def log_ignore(instance_name: str, reason: str, extra: dict | None = None):
+    extra = extra or {}
+    print(f"EVOLUTION_IGNORED: instance={instance_name} reason={reason} extra={extra}")
+
+
+def log_info(instance_name: str, msg: str, extra: dict | None = None):
+    extra = extra or {}
+    print(f"EVOLUTION_INFO: instance={instance_name} msg={msg} extra={extra}")
+
+
+def log_err(instance_name: str, msg: str, extra: dict | None = None):
+    extra = extra or {}
+    print(f"EVOLUTION_ERROR: instance={instance_name} msg={msg} extra={extra}")
+
+
 # ---------- Extractors (tolerantes) ----------
 
 def extract_instance_name(payload: Dict[str, Any]) -> Optional[str]:
@@ -96,6 +111,7 @@ def extract_message(payload: Dict[str, Any]) -> Dict[str, Any]:
       {"type": "text", "content": "..."}
       {"type": "audio", "url": "...", "mimetype": "...", "seconds": 12, "ptt": true}
       {"type": "image", "url": "...", "caption": "..."}
+      {"type": "document", "url": "...", "fileName": "..."}
       {"type": "unknown"}
     """
     data = payload.get("data", {})
@@ -175,45 +191,82 @@ async def evolution_webhook(event: str, request: Request):
 
     instance_name = extract_instance_name(payload) or "unknown"
     msg_type = "n/a"
+    remote_jid = None
+    dedup_key = None
 
     try:
-        # log curto
-        print(f"EVOLUTION_WEBHOOK: {event} instance={instance_name}")
+        # log curto inicial
+        print(f"EVOLUTION_WEBHOOK: event={event} instance={instance_name}")
 
         # só mensagens
         if event != "messages-upsert":
-            return {"ok": True}
+            log_ignore(instance_name, "non_message_event", {"event": event})
+            return {"ok": True, "ignored": "non_message_event", "event": event}
 
         # ignore mensagens do próprio número
         if extract_from_me(payload):
+            remote_jid = extract_remote_jid(payload)
+            log_ignore(instance_name, "from_me", {"remote_jid": remote_jid})
             return {"ok": True, "ignored": "from_me"}
 
         # ignore grupos por enquanto (remoteJid @g.us)
         remote_jid = extract_remote_jid(payload)
         if isinstance(remote_jid, str) and remote_jid.endswith("@g.us"):
+            log_ignore(instance_name, "group_message", {"remote_jid": remote_jid})
             return {"ok": True, "ignored": "group_message"}
 
-        # dedup (evita 409 / loop / spam)
+        # dedup (evita loop/spam)
         dedup_key = extract_dedup_key(payload)
-        if dedup_key and TenantService.is_duplicate_message(instance_name=instance_name, message_id=dedup_key):
-            return {"ok": True, "ignored": "duplicate", "message_id": dedup_key}
+        if dedup_key:
+            is_dup = TenantService.is_duplicate_message(instance_name=instance_name, message_id=dedup_key)
+            if is_dup:
+                log_ignore(instance_name, "duplicate", {"message_id": dedup_key, "remote_jid": remote_jid})
+                return {"ok": True, "ignored": "duplicate", "message_id": dedup_key}
+            else:
+                log_info(instance_name, "dedup_key_new", {"message_id": dedup_key, "remote_jid": remote_jid})
+        else:
+            log_info(instance_name, "no_dedup_key", {"remote_jid": remote_jid})
 
         message = extract_message(payload)
         msg_type = message.get("type", "unknown")
         if msg_type == "unknown":
+            log_ignore(instance_name, "unsupported_message", {"remote_jid": remote_jid})
             return {"ok": True, "ignored": "unsupported_message"}
 
         phone = extract_phone_e164(payload)
         push_name = extract_push_name(payload)
+
         if not phone:
+            log_ignore(instance_name, "no_phone", {"remote_jid": remote_jid, "push_name": push_name, "type": msg_type})
             return {"ok": True, "ignored": "no_phone"}
 
         # pega config do tenant
         tenant = TenantService.get_by_evolution_instance(instance_name)
         if not tenant:
+            log_ignore(instance_name, "tenant_not_found", {"instance": instance_name, "phone": phone})
             return {"ok": True, "ignored": "tenant_not_found", "instance": instance_name}
 
+        # loga o que vier do tenant (sem vazar token)
+        log_info(
+            instance_name,
+            "tenant_loaded",
+            {
+                "chatwoot_account_id": tenant.get("chatwoot_account_id"),
+                "chatwoot_inbox_id": tenant.get("chatwoot_inbox_id"),
+                "has_chatwoot_token": bool(tenant.get("chatwoot_api_token")),
+            },
+        )
+
         if not tenant.get("chatwoot_account_id") or not tenant.get("chatwoot_inbox_id") or not tenant.get("chatwoot_api_token"):
+            log_ignore(
+                instance_name,
+                "tenant_chatwoot_not_configured",
+                {
+                    "chatwoot_account_id": tenant.get("chatwoot_account_id"),
+                    "chatwoot_inbox_id": tenant.get("chatwoot_inbox_id"),
+                    "has_chatwoot_token": bool(tenant.get("chatwoot_api_token")),
+                },
+            )
             return {"ok": True, "ignored": "tenant_chatwoot_not_configured", "instance": instance_name}
 
         cw = ChatwootService(
@@ -223,15 +276,20 @@ async def evolution_webhook(event: str, request: Request):
         )
 
         # contato + conversa
+        contact_name = push_name or phone
         contact = cw.get_or_create_contact(
-            name=push_name or phone,
-            phone_e164=f"+{phone}",  # Chatwoot costuma aceitar E.164 com +
+            name=contact_name,
+            phone_e164=f"+{phone}",
         )
+        log_info(instance_name, "chatwoot_contact_ok", {"contact_id": contact.get("id"), "name": contact_name, "phone": phone})
 
         conv = cw.get_or_create_conversation(
             inbox_id=int(tenant["chatwoot_inbox_id"]),
             contact_id=int(contact["id"]),
         )
+        log_info(instance_name, "chatwoot_conversation_ok", {"conversation_id": conv.get("id"), "inbox_id": tenant.get("chatwoot_inbox_id")})
+
+        created = None
 
         # mensagem
         if msg_type == "text":
@@ -241,52 +299,55 @@ async def evolution_webhook(event: str, request: Request):
                 content=content,
                 message_type="incoming",
             )
+            log_info(instance_name, "chatwoot_message_text_ok", {"message_id": (created or {}).get("id")})
 
         elif msg_type == "audio":
             url = message.get("url")
-            # se não vier url, ainda registra evento
             content = "🎤 Áudio recebido"
+            if not url:
+                log_info(instance_name, "audio_without_url", {"note": "registrando apenas texto"})
             created = cw.create_message(
                 conversation_id=int(conv["id"]),
                 content=content,
                 message_type="incoming",
-                attachments=[{
-                    "file_type": "audio",
-                    "external_url": url,
-                }] if url else None,
+                attachments=[{"file_type": "audio", "external_url": url}] if url else None,
             )
+            log_info(instance_name, "chatwoot_message_audio_ok", {"message_id": (created or {}).get("id"), "has_url": bool(url)})
 
         elif msg_type == "image":
             url = message.get("url")
             caption = message.get("caption") or "🖼️ Imagem recebida"
+            if not url:
+                log_info(instance_name, "image_without_url", {"note": "registrando apenas texto"})
             created = cw.create_message(
                 conversation_id=int(conv["id"]),
                 content=caption,
                 message_type="incoming",
-                attachments=[{
-                    "file_type": "image",
-                    "external_url": url,
-                }] if url else None,
+                attachments=[{"file_type": "image", "external_url": url}] if url else None,
             )
+            log_info(instance_name, "chatwoot_message_image_ok", {"message_id": (created or {}).get("id"), "has_url": bool(url)})
 
         elif msg_type == "document":
             url = message.get("url")
             fname = message.get("fileName") or "📎 Documento recebido"
+            if not url:
+                log_info(instance_name, "document_without_url", {"note": "registrando apenas texto"})
             created = cw.create_message(
                 conversation_id=int(conv["id"]),
                 content=fname,
                 message_type="incoming",
-                attachments=[{
-                    "file_type": "file",
-                    "external_url": url,
-                }] if url else None,
+                attachments=[{"file_type": "file", "external_url": url}] if url else None,
             )
+            log_info(instance_name, "chatwoot_message_document_ok", {"message_id": (created or {}).get("id"), "has_url": bool(url)})
+
         else:
+            log_ignore(instance_name, "unhandled_type", {"type": msg_type})
             return {"ok": True, "ignored": "unhandled_type", "type": msg_type}
 
         # marca dedup como processado
         if dedup_key:
             TenantService.mark_message_processed(instance_name=instance_name, message_id=dedup_key)
+            log_info(instance_name, "dedup_marked_processed", {"message_id": dedup_key})
 
         print(f"EVOLUTION_WEBHOOK_OK: instance={instance_name} type={msg_type} chatwoot_conv={conv.get('id')}")
 
@@ -303,5 +364,15 @@ async def evolution_webhook(event: str, request: Request):
 
     except Exception as e:
         # webhook NÃO pode derrubar com 500 (senão vira retry infinito)
-        print(f"EVOLUTION_WEBHOOK_ERR: instance={instance_name} type={msg_type} err={repr(e)}")
+        log_err(
+            instance_name,
+            "exception",
+            {
+                "event": event,
+                "type": msg_type,
+                "remote_jid": remote_jid,
+                "message_id": dedup_key,
+                "error": repr(e),
+            },
+        )
         return {"ok": True, "ignored": "exception", "error": str(e)}
