@@ -26,3 +26,16 @@ class TenantChatwootConfigIn(BaseModel):
     chatwoot_account_id: int
     chatwoot_inbox_id: int
     chatwoot_api_token: str = Field(..., min_length=10)
+
+
+class TenantProfileOut(BaseModel):
+    id: int
+    name: str
+    evolution_instance_name: Optional[str] = None
+    chatwoot_account_id: Optional[int] = None
+    chatwoot_inbox_id: Optional[int] = None
+    # não recomendo expor token, mas se seu endpoint exige, deixa opcional
+    chatwoot_api_token: Optional[str] = None
+
+    class Config:
+        from_attributes = True  # Pydantic v2
