@@ -11,6 +11,7 @@ from app.api.endpoints import debug_auth
 from app.api.endpoints import tenant_provision
 from app.api.endpoints import evolution
 from app.api.endpoints import evolution_webhooks
+from app.api.endpoints import tenant_evolution
 
 app = FastAPI(
     title="SaaS Secretaria Inteligente",
@@ -47,6 +48,7 @@ app.include_router(debug_auth.router)
 app.include_router(tenant_provision.router)
 app.include_router(evolution.router)
 app.include_router(evolution_webhooks.router)
+app.include_router(tenant_evolution.router)
 
 # Exemplo: Usando uma variável de configuração
 @app.get("/")
