@@ -1,16 +1,28 @@
-from pydantic import BaseModel
-from typing import Optional, Dict, Any
+from __future__ import annotations
+from pydantic import BaseModel, Field
+from typing import Optional
 
-class TenantProfileOut(BaseModel):
-    user_id: int
-    nome: str
-    inbox_id: Optional[int] = None
-    phone_channel: Optional[str] = None
-    calendar_id: str = "primary"
-    duracao_consulta: int = 60
-    valor_consulta: Optional[float] = None
-    timezone: str = "America/Sao_Paulo"
-    regras: Dict[str, Any] = {}
+
+class TenantCreateIn(BaseModel):
+    name: str = Field(..., min_length=2, max_length=80)
+
+
+class TenantOut(BaseModel):
+    id: int
+    name: str
+    evolution_instance_name: Optional[str] = None
+    chatwoot_account_id: Optional[int] = None
+    chatwoot_inbox_id: Optional[int] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
+
+
+class TenantBindEvolutionIn(BaseModel):
+    instance_name: str = Field(..., min_length=2, max_length=64)
+
+
+class TenantChatwootConfigIn(BaseModel):
+    chatwoot_account_id: int
+    chatwoot_inbox_id: int
+    chatwoot_api_token: str = Field(..., min_length=10)

@@ -1,44 +1,96 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
-from time import time
+from typing import Optional, Dict, Any
+from sqlalchemy.orm import Session
+from sqlalchemy import select
+
+from app.db.session import SessionLocal
+from app.api.models.tenant import Tenant
 
 
 class TenantService:
-    """
-    STUB:
-      - Troque isso por leitura no seu banco (ex: Tenant model)
-      - E armazene dedup em Redis/DB
-    """
-
-    # exemplo em memória (pra teste)
-    _TENANTS: Dict[str, Dict[str, Any]] = {
-        # "tenant_1": {"chatwoot_account_id": 1, "chatwoot_inbox_id": 2, "chatwoot_api_token": "xxx"}
-    }
-
-    # dedup em memória (trocar por Redis)
-    _DEDUP: Dict[str, float] = {}  # key -> timestamp
-    _DEDUP_TTL_SECONDS = 60 * 10   # 10 min
-
     @staticmethod
     def get_by_evolution_instance(instance_name: str) -> Optional[Dict[str, Any]]:
-        return TenantService._TENANTS.get(instance_name)
+        if not instance_name or not instance_name.strip():
+            print("TENANT_LOOKUP_IGNORED: empty instance_name")
+            return None
+
+        db: Session = SessionLocal()
+        try:
+            tenant = db.execute(
+                select(Tenant).where(Tenant.evolution_instance_name == instance_name.strip())
+            ).scalar_one_or_none()
+
+            if not tenant:
+                print(f"TENANT_LOOKUP_NOT_FOUND: instance_name={instance_name}")
+                return None
+
+            print(f"TENANT_LOOKUP_OK: instance_name={instance_name} tenant_id={tenant.id}")
+            return {
+                "id": tenant.id,
+                "name": tenant.name,
+                "evolution_instance_name": tenant.evolution_instance_name,
+                "chatwoot_account_id": tenant.chatwoot_account_id,
+                "chatwoot_inbox_id": tenant.chatwoot_inbox_id,
+                "chatwoot_api_token": tenant.chatwoot_api_token,
+            }
+        finally:
+            db.close()
+
+    @staticmethod
+    def bind_evolution_instance(tenant_id: int, instance_name: str) -> Dict[str, Any]:
+        if not instance_name or not instance_name.strip():
+            raise ValueError("instance_name_empty")
+
+        db: Session = SessionLocal()
+        try:
+            tenant = db.get(Tenant, tenant_id)
+            if not tenant:
+                raise ValueError("tenant_not_found")
+
+            tenant.evolution_instance_name = instance_name.strip()
+            db.add(tenant)
+            db.commit()
+            db.refresh(tenant)
+
+            print(f"TENANT_BIND_OK: tenant_id={tenant.id} instance_name={tenant.evolution_instance_name}")
+            return {
+                "id": tenant.id,
+                "name": tenant.name,
+                "evolution_instance_name": tenant.evolution_instance_name,
+            }
+        finally:
+            db.close()
+
+    @staticmethod
+    def set_chatwoot_config(tenant_id: int, account_id: int, inbox_id: int, api_token: str) -> Dict[str, Any]:
+        db: Session = SessionLocal()
+        try:
+            tenant = db.get(Tenant, tenant_id)
+            if not tenant:
+                raise ValueError("tenant_not_found")
+
+            tenant.chatwoot_account_id = account_id
+            tenant.chatwoot_inbox_id = inbox_id
+            tenant.chatwoot_api_token = api_token
+
+            db.add(tenant)
+            db.commit()
+            db.refresh(tenant)
+
+            print(f"TENANT_CHATWOOT_OK: tenant_id={tenant.id} account_id={account_id} inbox_id={inbox_id}")
+            return {
+                "id": tenant.id,
+                "chatwoot_account_id": tenant.chatwoot_account_id,
+                "chatwoot_inbox_id": tenant.chatwoot_inbox_id,
+            }
+        finally:
+            db.close()
 
     @staticmethod
     def is_duplicate_message(instance_name: str, message_id: str) -> bool:
-        TenantService._gc()
-        k = f"{instance_name}:{message_id}"
-        return k in TenantService._DEDUP
+        return False
 
     @staticmethod
     def mark_message_processed(instance_name: str, message_id: str) -> None:
-        TenantService._gc()
-        k = f"{instance_name}:{message_id}"
-        TenantService._DEDUP[k] = time()
-
-    @staticmethod
-    def _gc():
-        now = time()
-        dead = [k for k, ts in TenantService._DEDUP.items() if (now - ts) > TenantService._DEDUP_TTL_SECONDS]
-        for k in dead:
-            TenantService._DEDUP.pop(k, None)
+        return None

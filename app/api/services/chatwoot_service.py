@@ -1,15 +1,11 @@
+from __future__ import annotations
+
 import requests
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional, List
 
 
 class ChatwootService:
-    """
-    Service multi-tenant:
-      - base_url é global (pode vir de settings)
-      - api_token + account_id (e inbox_id quando necessário) vêm do tenant (DB)
-    """
-
-    def __init__(self, base_url: str, api_token: str, account_id: Optional[int] = None):
+    def __init__(self, base_url: str, api_token: str, account_id: int):
         self.base_url = base_url.rstrip("/")
         self.api_token = api_token
         self.account_id = account_id
@@ -20,73 +16,84 @@ class ChatwootService:
             "Content-Type": "application/json",
         }
 
-    # ---------- Admin-level (não precisa account_id) ----------
-    def create_account(self, name: str) -> Dict[str, Any]:
-        url = f"{self.base_url}/api/v1/accounts"
-        payload = {"name": name}
-        r = requests.post(url, json=payload, headers=self._headers(), timeout=30)
+    def _url(self, path: str) -> str:
+        return f"{self.base_url}{path}"
+
+    def _raise(self, r: requests.Response, msg: str):
         if r.status_code >= 300:
-            raise RuntimeError(f"Chatwoot create_account failed: {r.status_code} {r.text}")
-        return r.json()
+            raise RuntimeError(f"{msg}: {r.status_code} {r.text}")
 
-    # ---------- Account-level (precisa account_id) ----------
-    def create_api_inbox(self, name: str) -> Dict[str, Any]:
-        if not self.account_id:
-            raise RuntimeError("ChatwootService.account_id is required for create_api_inbox")
-        url = f"{self.base_url}/api/v1/accounts/{self.account_id}/inboxes"
-        payload = {
-            "name": name,
-            "channel": {"type": "api", "webhook_url": None},
-        }
-        r = requests.post(url, json=payload, headers=self._headers(), timeout=30)
-        if r.status_code >= 300:
-            raise RuntimeError(f"Chatwoot create_inbox failed: {r.status_code} {r.text}")
-        return r.json()
+    # ---------- Contacts ----------
 
-    def create_contact(self, name: str, phone_e164: str, identifier: Optional[str] = None) -> Dict[str, Any]:
-        """
-        phone_e164: ex '553499190547' (sem '+') ou com '+', mas mantenha um padrão.
-        identifier: opcional (ex: wa:5534...)
-        """
-        if not self.account_id:
-            raise RuntimeError("ChatwootService.account_id is required for create_contact")
+    def search_contact(self, phone_e164: str) -> Optional[Dict[str, Any]]:
+        # endpoint comum: /contacts/search?q=
+        url = self._url(f"/api/v1/accounts/{self.account_id}/contacts/search")
+        r = requests.get(url, params={"q": phone_e164}, headers=self._headers(), timeout=30)
+        self._raise(r, "Chatwoot search_contact failed")
+        data = r.json()
 
-        url = f"{self.base_url}/api/v1/accounts/{self.account_id}/contacts"
+        # Chatwoot pode devolver {"payload": [...]} ou lista direta dependendo da versão
+        items = data.get("payload") if isinstance(data, dict) else data
+        if isinstance(items, list) and items:
+            return items[0]
+        return None
+
+    def create_contact(self, name: str, phone_e164: str) -> Dict[str, Any]:
+        url = self._url(f"/api/v1/accounts/{self.account_id}/contacts")
         payload = {
             "name": name,
             "phone_number": phone_e164,
         }
-        if identifier:
-            payload["identifier"] = identifier
-
         r = requests.post(url, json=payload, headers=self._headers(), timeout=30)
-        if r.status_code >= 300:
-            raise RuntimeError(f"Chatwoot create_contact failed: {r.status_code} {r.text}")
+        self._raise(r, "Chatwoot create_contact failed")
         return r.json()
+
+    def get_or_create_contact(self, name: str, phone_e164: str) -> Dict[str, Any]:
+        found = self.search_contact(phone_e164=phone_e164)
+        if found:
+            return found
+        return self.create_contact(name=name, phone_e164=phone_e164)
+
+    # ---------- Conversations ----------
 
     def create_conversation(self, inbox_id: int, contact_id: int) -> Dict[str, Any]:
-        if not self.account_id:
-            raise RuntimeError("ChatwootService.account_id is required for create_conversation")
-
-        url = f"{self.base_url}/api/v1/accounts/{self.account_id}/conversations"
-        payload = {"inbox_id": inbox_id, "contact_id": contact_id}
-
+        url = self._url(f"/api/v1/accounts/{self.account_id}/conversations")
+        payload = {
+            "inbox_id": inbox_id,
+            "contact_id": contact_id,
+        }
         r = requests.post(url, json=payload, headers=self._headers(), timeout=30)
-        if r.status_code >= 300:
-            raise RuntimeError(f"Chatwoot create_conversation failed: {r.status_code} {r.text}")
+        self._raise(r, "Chatwoot create_conversation failed")
         return r.json()
 
-    def create_message(self, conversation_id: int, content: str, message_type: str = "incoming") -> Dict[str, Any]:
+    def get_or_create_conversation(self, inbox_id: int, contact_id: int) -> Dict[str, Any]:
         """
-        message_type: 'incoming' (mensagem recebida do WhatsApp) ou 'outgoing'
+        Chatwoot não tem um "get active conversation by contact+inbox" super estável em todas versões.
+        Então, por agora: sempre cria.
+        (Depois você pode buscar conversas do contato e reutilizar se estiver aberta.)
         """
-        if not self.account_id:
-            raise RuntimeError("ChatwootService.account_id is required for create_message")
+        return self.create_conversation(inbox_id=inbox_id, contact_id=contact_id)
 
-        url = f"{self.base_url}/api/v1/accounts/{self.account_id}/conversations/{conversation_id}/messages"
-        payload = {"content": content, "message_type": message_type}
+    # ---------- Messages ----------
+
+    def create_message(
+        self,
+        conversation_id: int,
+        content: str,
+        message_type: str = "incoming",
+        attachments: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
+        url = self._url(f"/api/v1/accounts/{self.account_id}/conversations/{conversation_id}/messages")
+        payload: Dict[str, Any] = {
+            "content": content,
+            "message_type": message_type,  # incoming/outgoing
+        }
+
+        # Observação: "attachments" via external_url pode variar por versão.
+        # Se a sua versão não suportar, você ainda terá a mensagem de texto.
+        if attachments:
+            payload["attachments"] = attachments
 
         r = requests.post(url, json=payload, headers=self._headers(), timeout=30)
-        if r.status_code >= 300:
-            raise RuntimeError(f"Chatwoot create_message failed: {r.status_code} {r.text}")
+        self._raise(r, "Chatwoot create_message failed")
         return r.json()
