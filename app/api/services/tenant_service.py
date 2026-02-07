@@ -1,3 +1,5 @@
+# app/api/services/tenant_service.py
+
 from __future__ import annotations
 
 from typing import Optional, Dict, Any
@@ -26,6 +28,35 @@ class TenantService:
                 return None
 
             print(f"TENANT_LOOKUP_OK: instance_name={instance_name} tenant_id={tenant.id}")
+            return {
+                "id": tenant.id,
+                "name": tenant.name,
+                "evolution_instance_name": tenant.evolution_instance_name,
+                "chatwoot_account_id": tenant.chatwoot_account_id,
+                "chatwoot_inbox_id": tenant.chatwoot_inbox_id,
+                "chatwoot_api_token": tenant.chatwoot_api_token,
+            }
+        finally:
+            db.close()
+
+    # ✅ NOVO: usado no fluxo de saída (Chatwoot -> Evolution)
+    @staticmethod
+    def get_by_chatwoot_inbox_id(inbox_id: int) -> Optional[Dict[str, Any]]:
+        if not inbox_id:
+            print("TENANT_LOOKUP_IGNORED: empty inbox_id")
+            return None
+
+        db: Session = SessionLocal()
+        try:
+            tenant = db.execute(
+                select(Tenant).where(Tenant.chatwoot_inbox_id == int(inbox_id))
+            ).scalar_one_or_none()
+
+            if not tenant:
+                print(f"TENANT_LOOKUP_NOT_FOUND_BY_INBOX: inbox_id={inbox_id}")
+                return None
+
+            print(f"TENANT_LOOKUP_OK_BY_INBOX: inbox_id={inbox_id} tenant_id={tenant.id}")
             return {
                 "id": tenant.id,
                 "name": tenant.name,
