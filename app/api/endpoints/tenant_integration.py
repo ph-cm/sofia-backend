@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Request, HTTPException, Query
 from typing import Any, Dict, Optional
-
+from app.core.config import settings
+from app.api.services.tenant_service import TenantService
 from app.db.session import SessionLocal
 from app.api.services.tenant_integration_service import TenantIntegrationService
 from app.api.services.evolution_service import EvolutionService
+from app.api.services.chatwoot_service import ChatwootService
 
 router = APIRouter(prefix="/integrations/chatwoot", tags=["Chatwoot Integration"])
 
@@ -41,6 +43,23 @@ def _extract_event_name(payload: Dict[str, Any]) -> str:
         if isinstance(payload, dict)
         else "unknown"
     )
+
+def _extract_contact_id(conv: Dict[str, Any]) -> Optional[int]:
+    # conv["contact"]["id"]
+    c = conv.get("contact")
+    if isinstance(c, dict):
+        v = c.get("id")
+        try:
+            return int(v) if v is not None else None
+        except Exception:
+            pass
+
+    # conv["contact_id"]
+    v = conv.get("contact_id")
+    try:
+        return int(v) if v is not None else None
+    except Exception:
+        return None
 
 
 def _extract_message(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -218,11 +237,44 @@ async def chatwoot_events(
 
         # 7) extrai telefone do destinatário
         raw_phone = _extract_recipient_phone(payload, conv)
+
         if not raw_phone:
-            _log_ignore("missing_recipient_phone", {"user_id": user_id, "account_id": account_id, "inbox_id": inbox_id})
-            return {"ok": True}
+            # ✅ fallback: pegar contact_id da conversation e buscar no Chatwoot
+            contact_id = _extract_contact_id(conv)
+            if not contact_id:
+                _log_ignore(
+                    "missing_recipient_phone",
+                    {"note": "no phone in payload and no contact_id", "user_id": user_id, "account_id": account_id, "inbox_id": inbox_id},
+                )
+                return {"ok": True}
+
+            # ✅ token para ler contato no Chatwoot:
+            # - ideal: salvar chatwoot_api_token no TenantIntegration (por tenant)
+            # - rápido: usar um token global admin em settings
+            chatwoot_token = getattr(integration, "chatwoot_api_token", None) or getattr(settings, "CHATWOOT_API_TOKEN_GLOBAL", None)
+
+            if not chatwoot_token:
+                _log_ignore("missing_chatwoot_token_for_lookup", {"user_id": user_id, "account_id": account_id, "contact_id": contact_id})
+                return {"ok": True}
+
+            cw = ChatwootService(
+                base_url=settings.CHATWOOT_BASE_URL,
+                api_token=chatwoot_token,
+                account_id=account_id,
+            )
+
+            contact_payload = cw.get_contact(contact_id)
+            raw_phone = ChatwootService.extract_phone_from_contact(contact_payload)
+
+            if not raw_phone:
+                _log_ignore(
+                    "missing_recipient_phone",
+                    {"note": "contact fetched but phone empty", "contact_id": contact_id, "user_id": user_id},
+                )
+                return {"ok": True}
 
         to_phone = _normalize_phone_for_evolution(raw_phone)
+
 
         # 8) detectar se é texto ou áudio
         content = (msg.get("content") or "").strip()

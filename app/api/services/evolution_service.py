@@ -193,3 +193,21 @@ class EvolutionService:
             return EvolutionService._try_post(candidate_paths[:2], json=payload, timeout=60)
         except Exception:
             return EvolutionService._try_post(candidate_paths[2:], json=try_payload, timeout=60)
+        
+    # def _extract_contact_id(conv: Dict[str, Any]) -> Optional[int]:
+    #     # forma 1: conversation.contact.id
+    #     c = conv.get("contact")
+    #     if isinstance(c, dict):
+    #         v = c.get("id")
+    #         try:
+    #             return int(v) if v is not None else None
+    #         except Exception:
+    #             pass
+
+    #     # forma 2: conversation.contact_id
+    #     v = conv.get("contact_id")
+    #     try:
+    #         return int(v) if v is not None else None
+    #     except Exception:
+    #         return None
+

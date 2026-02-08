@@ -182,3 +182,53 @@ class ChatwootService:
 
         print("CHATWOOT_MESSAGE_CREATED:", {"id": self._extract_id(data), "conversation_id": conversation_id, "type": message_type})
         return data if isinstance(data, dict) else {"raw": data}
+    
+    def get_contact(self, contact_id: int) -> Dict[str, Any]:
+        url = self._url(f"/api/v1/accounts/{self.account_id}/contacts/{contact_id}")
+        r = requests.get(url, headers=self._headers(), timeout=30)
+        self._raise(r, "Chatwoot get_contact failed")
+        return r.json()
+    
+    def extract_phone_from_contact(contact_payload: Dict[str, Any]) -> Optional[str]:
+        # chatwoot pode devolver {"payload": {...}} ou direto {...}
+        contact = contact_payload.get("payload") if isinstance(contact_payload, dict) and isinstance(contact_payload.get("payload"), dict) else contact_payload
+        if not isinstance(contact, dict):
+            return None
+
+        for k in ("phone_number", "phone", "phoneNumber"):
+            v = contact.get(k)
+            if isinstance(v, str) and v.strip():
+                return v.strip()
+        return None
+    
+    @staticmethod
+    def extract_phone_from_contact(contact_payload: Dict[str, Any]) -> Optional[str]:
+        contact = contact_payload.get("payload") if isinstance(contact_payload, dict) and isinstance(contact_payload.get("payload"), dict) else contact_payload
+        if not isinstance(contact, dict):
+            return None
+
+        for k in ("phone_number", "phone", "phoneNumber"):
+            v = contact.get(k)
+            if isinstance(v, str) and v.strip():
+                return v.strip()
+        return None
+    
+    def _extract_contact_id(conv: Dict[str, Any]) -> Optional[int]:
+        # forma 1: conversation.contact.id
+        c = conv.get("contact")
+        if isinstance(c, dict):
+            v = c.get("id")
+            try:
+                return int(v) if v is not None else None
+            except Exception:
+                pass
+
+        # forma 2: conversation.contact_id
+        v = conv.get("contact_id")
+        try:
+            return int(v) if v is not None else None
+        except Exception:
+            return None
+
+
+
