@@ -44,8 +44,21 @@ def _extract_event_name(payload: Dict[str, Any]) -> str:
 
 
 def _extract_message(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Chatwoot pode enviar:
+      A) payload["message"] = {...}
+      B) "mensagem no root" (payload já tem content/message_type/etc)
+    """
     msg = payload.get("message")
-    return msg if isinstance(msg, dict) else {}
+    if isinstance(msg, dict) and msg:
+        return msg
+
+    # fallback: payload é a própria msg (se tiver cara de msg)
+    if isinstance(payload.get("content"), str) or payload.get("message_type") in ("incoming", "outgoing"):
+        return payload
+
+    return {}
+
 
 
 def _extract_conversation(payload: Dict[str, Any]) -> Dict[str, Any]:
