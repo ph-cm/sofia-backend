@@ -22,11 +22,17 @@ class EvolutionService:
         try:
             r = requests.post(url, json=payload, headers=self._headers(), timeout=timeout)
             
-            # Se for 404 ou 405 (Method Not Allowed), lançamos exceção específica para permitir fallback
+            # Tratamento especial para 404/405 para permitir o sistema de fallback
             if r.status_code in (404, 405):
-                raise FileNotFoundError(f"{r.status_code} Not Found/Method: {url}")
+                try:
+                    # Tenta pegar a mensagem de erro da API para saber se é "Instance not found"
+                    msg = r.json()
+                except:
+                    # Se não for JSON (ex: HTML do Nginx), pega o começo do texto
+                    msg = r.text[:200]
+                raise FileNotFoundError(f"{r.status_code} em {url}: {msg}")
             
-            # Se for erro de aplicação (400, 401, 500)
+            # Erros gerais de aplicação
             if r.status_code >= 400:
                 try:
                     error_data = r.json()
@@ -97,13 +103,14 @@ class EvolutionService:
             "webhook_base64": webhook_base64,
             "events": events,
         }
+        
+        # Tenta rotas comuns de webhook
         try:
             return svc._post(f"/webhook/set/{instance_name}", payload)
         except FileNotFoundError:
             try:
                 return svc._post(f"/webhook/instance/{instance_name}", payload)
             except FileNotFoundError:
-                # Fallback Query Param
                 return svc._post(f"/webhook/instance?instanceName={instance_name}", payload)
 
     @staticmethod
@@ -112,7 +119,7 @@ class EvolutionService:
         return svc._get(f"/webhook/find/{instance_name}")
 
     # ======================
-    # Messaging (Estratégia Tripla)
+    # Messaging (Estratégia Quádrupla: V1, V2, API Prefix, Legacy)
     # ======================
 
     @classmethod
@@ -125,27 +132,32 @@ class EvolutionService:
             "linkPreview": True
         }
         
-        # 1. Tenta V1 (Padrão: /message/sendText/{instance})
-        try:
-            return svc._post(f"/message/sendText/{instance_name}", payload)
-        except FileNotFoundError:
-            pass # Tenta próxima estratégia
-
-        # 2. Tenta V2 (Novo Padrão: /message/send/text/{instance})
+        # 1. Tenta V2 Padrão (/message/send/text/{instance})
         try:
             return svc._post(f"/message/send/text/{instance_name}", payload)
-        except FileNotFoundError:
-            pass # Tenta próxima estratégia
+        except FileNotFoundError: pass
 
-        # 3. Tenta Legacy/QueryParam (/message/sendText?instanceName={instance})
-        # Algumas versões exigem isso
+        # 2. Tenta V2 com prefixo API (/api/message/send/text/{instance})
+        try:
+            return svc._post(f"/api/message/send/text/{instance_name}", payload)
+        except FileNotFoundError: pass
+
+        # 3. Tenta V1 Padrão (/message/sendText/{instance})
+        try:
+            return svc._post(f"/message/sendText/{instance_name}", payload)
+        except FileNotFoundError: pass
+        
+        # 4. Tenta V1 com prefixo API (/api/message/sendText/{instance})
+        try:
+            return svc._post(f"/api/message/sendText/{instance_name}", payload)
+        except FileNotFoundError: pass
+
+        # 5. Tenta Legacy Query Param
         return svc._post(f"/message/sendText?instanceName={instance_name}", payload)
 
     @classmethod
     def send_audio(cls, instance_name: str, to_number: str, audio_url: str):
         svc = cls()
-        
-        # Payload comum
         payload = {
             "number": to_number,
             "audio": audio_url,
@@ -153,25 +165,27 @@ class EvolutionService:
             "recordinAudio": True 
         }
         
-        # 1. Tenta V1 (/message/sendWhatsAppAudio/{instance})
-        try:
-            return svc._post(f"/message/sendWhatsAppAudio/{instance_name}", payload)
-        except FileNotFoundError:
-            pass
-
-        # 2. Tenta V1 Alternativa (/message/sendAudio/{instance})
-        try:
-            return svc._post(f"/message/sendAudio/{instance_name}", payload)
-        except FileNotFoundError:
-            pass
-            
-        # 3. Tenta V2 (/message/send/audio/{instance})
+        # 1. V2 Padrão
         try:
             return svc._post(f"/message/send/audio/{instance_name}", payload)
-        except FileNotFoundError:
-            pass
+        except FileNotFoundError: pass
 
-        # 4. Tenta Legacy/QueryParam
+        # 2. V2 API Prefix
+        try:
+            return svc._post(f"/api/message/send/audio/{instance_name}", payload)
+        except FileNotFoundError: pass
+
+        # 3. V1 Padrão (/message/sendWhatsAppAudio)
+        try:
+            return svc._post(f"/message/sendWhatsAppAudio/{instance_name}", payload)
+        except FileNotFoundError: pass
+
+        # 4. V1 Alternativa (/message/sendAudio)
+        try:
+            return svc._post(f"/message/sendAudio/{instance_name}", payload)
+        except FileNotFoundError: pass
+        
+        # 5. Legacy
         return svc._post(f"/message/sendWhatsAppAudio?instanceName={instance_name}", payload)
 
     @classmethod
