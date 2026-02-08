@@ -253,61 +253,60 @@ async def chatwoot_events(
 
         instance_name = str(integration.evolution_instance_id)
 
-        # 7) extrai telefone do destinatário
-        # ... (seu código anterior até o passo 6)
-
-        # 7) extrai telefone do destinatário
+       # 7) extrai telefone do destinatário
         raw_phone = _extract_recipient_phone(payload, conv)
 
         if not raw_phone:
-            # Lógica de Fallback melhorada
             contact_id = _extract_contact_id(conv)
             
-            # Prepara o token, pois vamos precisar dele se tivermos que chamar a API
+            # Tenta pegar token da integração ou o Global das configurações
             chatwoot_token = getattr(integration, "chatwoot_api_token", None) or getattr(settings, "CHATWOOT_API_TOKEN_GLOBAL", None)
             
-            # --- NOVO BLOCO: Se não achou contact_id no payload, busca a conversa na API ---
-            if not contact_id and chatwoot_token:
-                conversation_id = _extract_id(conv) or _safe_int(conv.get("id"))
-                
-                if conversation_id:
-                    try:
-                        _log_info("fetching_conversation_details", {"conv_id": conversation_id})
-                        cw_temp = ChatwootService(
-                            base_url=settings.CHATWOOT_BASE_URL,
-                            api_token=chatwoot_token,
-                            account_id=account_id,
-                        )
-                        full_conv_data = cw_temp.get_conversation(conversation_id)
-                        
-                        # --- CORREÇÃO AQUI ---
-                        # A API do Chatwoot retorna 'meta': {'contact': {...}} com os dados do cliente
-                        meta = full_conv_data.get("meta", {})
-                        
-                        # 1. Tenta pegar direto do objeto 'contact' dentro de meta (Onde o cliente real fica)
-                        contact_obj = meta.get("contact")
-                        if isinstance(contact_obj, dict):
-                            contact_id = contact_obj.get("id")
-                            # Bônus: Se já tiver o telefone aqui, já pegamos!
-                            if not raw_phone:
-                                raw_phone = contact_obj.get("phone_number")
+            # --- DEBUG: Verifica por que a API não está sendo chamada ---
+            conversation_id = _extract_id(conv) or _safe_int(conv.get("id"))
+            _log_info("debug_fallback_check", {
+                "has_phone": bool(raw_phone),
+                "contact_id_local": contact_id,
+                "has_token": bool(chatwoot_token),
+                "conv_id": conversation_id
+            })
+            # ------------------------------------------------------------
 
-                        # 2. Se falhar, tenta pegar do contact_inbox
-                        if not contact_id:
-                            contact_id = _extract_contact_id(full_conv_data)
-                        
-                        # Debug: Se falhar, vamos ver o que veio
-                        if not contact_id:
-                             _log_info("api_response_debug", {"keys": list(full_conv_data.keys()), "meta_keys": list(meta.keys())})
+            if not contact_id and chatwoot_token and conversation_id:
+                try:
+                    _log_info("fetching_conversation_details", {"conv_id": conversation_id})
+                    cw_temp = ChatwootService(
+                        base_url=settings.CHATWOOT_BASE_URL,
+                        api_token=chatwoot_token,
+                        account_id=account_id,
+                    )
+                    full_conv_data = cw_temp.get_conversation(conversation_id)
+                    
+                    # Debug da resposta da API para garantir que estamos pegando o campo certo
+                    meta = full_conv_data.get("meta", {})
+                    # _log_info("api_response_structure", {"meta_keys": list(meta.keys())})
 
-                    except Exception as e:
-                        _log_err("failed_fetching_conversation", {"error": str(e)})
-            # -------------------------------------------------------------------------------
+                    # Tenta pegar o contato (cliente) dentro de meta
+                    contact_obj = meta.get("contact")
+                    
+                    if isinstance(contact_obj, dict):
+                        contact_id = contact_obj.get("id")
+                        # Se a API já devolver o telefone, pegamos aqui!
+                        if not raw_phone:
+                            raw_phone = contact_obj.get("phone_number")
+                    
+                    # Fallback: tenta pegar do contact_inbox
+                    if not contact_id:
+                        contact_id = _extract_contact_id(full_conv_data)
+                        
+                except Exception as e:
+                    _log_err("failed_fetching_conversation", {"error": str(e)})
 
             if not contact_id:
+                # Se falhar aqui, verifique se "has_token" deu False no log acima
                 _log_ignore(
                     "missing_recipient_phone",
-                    {"note": "no phone in payload and could not resolve contact_id via API", "user_id": user_id, "account_id": account_id},
+                    {"note": "no phone in payload and could not resolve contact_id via API", "user_id": user_id},
                 )
                 return {"ok": True}
 
@@ -315,14 +314,15 @@ async def chatwoot_events(
                 _log_ignore("missing_chatwoot_token_for_lookup", {"user_id": user_id})
                 return {"ok": True}
 
-            cw = ChatwootService(
-                base_url=settings.CHATWOOT_BASE_URL,
-                api_token=chatwoot_token,
-                account_id=account_id,
-            )
-
-            contact_payload = cw.get_contact(contact_id)
-            raw_phone = ChatwootService.extract_phone_from_contact(contact_payload)
+            # Se ainda não temos o telefone, mas temos o contact_id, buscamos o contato
+            if not raw_phone:
+                cw = ChatwootService(
+                    base_url=settings.CHATWOOT_BASE_URL,
+                    api_token=chatwoot_token,
+                    account_id=account_id,
+                )
+                contact_payload = cw.get_contact(contact_id)
+                raw_phone = ChatwootService.extract_phone_from_contact(contact_payload)
 
             if not raw_phone:
                 _log_ignore(
