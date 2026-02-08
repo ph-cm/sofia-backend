@@ -22,17 +22,34 @@ class EvolutionService:
         try:
             r = requests.post(url, json=payload, headers=self._headers(), timeout=timeout)
             
-            # Tratamento especial para 404/405 para permitir o sistema de fallback
             if r.status_code in (404, 405):
+                # Tenta extrair a mensagem de erro para decisão inteligente
                 try:
-                    # Tenta pegar a mensagem de erro da API para saber se é "Instance not found"
-                    msg = r.json()
+                    resp_json = r.json()
+                    # Verifica padrões comuns de erro da Evolution
+                    err_response = resp_json.get("response", {})
+                    msg_list = err_response.get("message", []) if isinstance(err_response, dict) else []
+                    error_msg = str(resp_json)
+                    
+                    # Se for "Cannot POST", é erro de ROTA (URL errada) -> Devemos tentar outra estratégia
+                    is_route_error = "Cannot POST" in error_msg or "Cannot POST" in str(msg_list)
+                    
+                    # Se for "Instance not found", a rota existe mas o nome tá errado -> NÃO adianta tentar outra rota
+                    is_instance_error = "Instance not found" in error_msg or "instance not found" in error_msg.lower()
+
+                    if is_instance_error:
+                        raise RuntimeError(f"INSTANCE_NOT_FOUND: A instância '{url.split('/')[-1]}' não existe ou está offline.")
+
+                except RuntimeError:
+                    raise # Repassa o erro de instância encontrado
                 except:
-                    # Se não for JSON (ex: HTML do Nginx), pega o começo do texto
-                    msg = r.text[:200]
-                raise FileNotFoundError(f"{r.status_code} em {url}: {msg}")
+                    # Se não der pra ler JSON (ex: Nginx HTML), assume erro de rota
+                    is_route_error = True
+
+                # Lança FileNotFoundError apenas se for erro de ROTA, para o fallback funcionar
+                print(f"DEBUG_EVO_FAIL: {r.status_code} em {path} -> {r.text[:200]}") # Debug visual
+                raise FileNotFoundError(f"{r.status_code} Not Found: {url}")
             
-            # Erros gerais de aplicação
             if r.status_code >= 400:
                 try:
                     error_data = r.json()
@@ -87,14 +104,7 @@ class EvolutionService:
     # ======================
 
     @staticmethod
-    def set_webhook(
-        instance_name: str,
-        url: str,
-        events: list[str],
-        enabled: bool = True,
-        webhook_by_events: bool = False,
-        webhook_base64: bool = False,
-    ):
+    def set_webhook(instance_name: str, url: str, events: list[str], enabled: bool = True, webhook_by_events: bool = False, webhook_base64: bool = False):
         svc = EvolutionService()
         payload = {
             "enabled": enabled,
@@ -103,8 +113,6 @@ class EvolutionService:
             "webhook_base64": webhook_base64,
             "events": events,
         }
-        
-        # Tenta rotas comuns de webhook
         try:
             return svc._post(f"/webhook/set/{instance_name}", payload)
         except FileNotFoundError:
@@ -119,12 +127,14 @@ class EvolutionService:
         return svc._get(f"/webhook/find/{instance_name}")
 
     # ======================
-    # Messaging (Estratégia Quádrupla: V1, V2, API Prefix, Legacy)
+    # Messaging (Estratégia "Smart Fallback")
     # ======================
 
     @classmethod
     def send_text(cls, instance_name: str, to_number: str, text: str):
         svc = cls()
+        instance_name = instance_name.strip() # Sanitização básica
+        
         payload = {
             "number": to_number,
             "text": text,
@@ -137,7 +147,7 @@ class EvolutionService:
             return svc._post(f"/message/send/text/{instance_name}", payload)
         except FileNotFoundError: pass
 
-        # 2. Tenta V2 com prefixo API (/api/message/send/text/{instance})
+        # 2. Tenta V2 API Prefix (/api/message/send/text/{instance})
         try:
             return svc._post(f"/api/message/send/text/{instance_name}", payload)
         except FileNotFoundError: pass
@@ -147,7 +157,7 @@ class EvolutionService:
             return svc._post(f"/message/sendText/{instance_name}", payload)
         except FileNotFoundError: pass
         
-        # 4. Tenta V1 com prefixo API (/api/message/sendText/{instance})
+        # 4. Tenta V1 API Prefix (/api/message/sendText/{instance})
         try:
             return svc._post(f"/api/message/sendText/{instance_name}", payload)
         except FileNotFoundError: pass
@@ -158,6 +168,8 @@ class EvolutionService:
     @classmethod
     def send_audio(cls, instance_name: str, to_number: str, audio_url: str):
         svc = cls()
+        instance_name = instance_name.strip()
+        
         payload = {
             "number": to_number,
             "audio": audio_url,
@@ -165,28 +177,24 @@ class EvolutionService:
             "recordinAudio": True 
         }
         
-        # 1. V2 Padrão
-        try:
-            return svc._post(f"/message/send/audio/{instance_name}", payload)
-        except FileNotFoundError: pass
-
-        # 2. V2 API Prefix
-        try:
-            return svc._post(f"/api/message/send/audio/{instance_name}", payload)
-        except FileNotFoundError: pass
-
-        # 3. V1 Padrão (/message/sendWhatsAppAudio)
-        try:
-            return svc._post(f"/message/sendWhatsAppAudio/{instance_name}", payload)
-        except FileNotFoundError: pass
-
-        # 4. V1 Alternativa (/message/sendAudio)
-        try:
-            return svc._post(f"/message/sendAudio/{instance_name}", payload)
-        except FileNotFoundError: pass
+        # Tenta sequência de rotas (V2 -> V2API -> V1 -> V1API -> Legacy)
+        routes = [
+            f"/message/send/audio/{instance_name}",
+            f"/api/message/send/audio/{instance_name}",
+            f"/message/sendWhatsAppAudio/{instance_name}",
+            f"/message/sendAudio/{instance_name}",
+            f"/message/sendWhatsAppAudio?instanceName={instance_name}"
+        ]
         
-        # 5. Legacy
-        return svc._post(f"/message/sendWhatsAppAudio?instanceName={instance_name}", payload)
+        last_error = None
+        for route in routes:
+            try:
+                return svc._post(route, payload)
+            except FileNotFoundError as e:
+                last_error = e
+                continue
+        
+        raise last_error
 
     @classmethod
     def send_audio_url(cls, instance_name: str, to: str, audio_url: str, ptt: bool = True):
