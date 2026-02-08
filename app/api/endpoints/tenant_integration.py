@@ -35,6 +35,24 @@ def _safe_int(v: Any) -> Optional[int]:
     except Exception:
         return None
 
+def _extract_id(source: Any) -> Optional[int]:
+    """
+    Helper para extrair o ID de um objeto (dict) ou retornar o valor se já for int/str numérico.
+    """
+    if source is None:
+        return None
+    
+    # Se já for um inteiro
+    if isinstance(source, int):
+        return source
+        
+    # Se for um dicionário, tenta pegar a chave "id"
+    if isinstance(source, dict):
+        return _safe_int(source.get("id"))
+        
+    # Tenta converter string numérica
+    return _safe_int(source)
+
 
 def _extract_event_name(payload: Dict[str, Any]) -> str:
     # dependendo da versão do Chatwoot pode vir "event", "type", etc.
@@ -236,25 +254,56 @@ async def chatwoot_events(
         instance_name = str(integration.evolution_instance_id)
 
         # 7) extrai telefone do destinatário
+        # ... (seu código anterior até o passo 6)
+
+        # 7) extrai telefone do destinatário
         raw_phone = _extract_recipient_phone(payload, conv)
 
         if not raw_phone:
-            # ✅ fallback: pegar contact_id da conversation e buscar no Chatwoot
+            # Lógica de Fallback melhorada
             contact_id = _extract_contact_id(conv)
+            
+            # Prepara o token, pois vamos precisar dele se tivermos que chamar a API
+            chatwoot_token = getattr(integration, "chatwoot_api_token", None) or getattr(settings, "CHATWOOT_API_TOKEN_GLOBAL", None)
+            
+            # --- NOVO BLOCO: Se não achou contact_id no payload, busca a conversa na API ---
+            if not contact_id and chatwoot_token:
+                conversation_id = _extract_id(conv) or _safe_int(conv.get("id"))
+                
+                if conversation_id:
+                    try:
+                        _log_info("fetching_conversation_details", {"conv_id": conversation_id})
+                        cw_temp = ChatwootService(
+                            base_url=settings.CHATWOOT_BASE_URL,
+                            api_token=chatwoot_token,
+                            account_id=account_id,
+                        )
+                        # Busca a conversa completa na API
+                        full_conv_data = cw_temp.get_conversation(conversation_id)
+                        
+                        # Tenta extrair o contact_id da resposta da API
+                        # O Chatwoot costuma mandar em meta.sender.id ou contact_inbox.contact_id
+                        meta = full_conv_data.get("meta", {})
+                        sender = meta.get("sender", {})
+                        contact_id = sender.get("id")
+                        
+                        if not contact_id:
+                            # Tenta fallback para contact_inbox
+                            contact_id = _extract_contact_id(full_conv_data)
+                            
+                    except Exception as e:
+                        _log_err("failed_fetching_conversation", {"error": str(e)})
+            # -------------------------------------------------------------------------------
+
             if not contact_id:
                 _log_ignore(
                     "missing_recipient_phone",
-                    {"note": "no phone in payload and no contact_id", "user_id": user_id, "account_id": account_id, "inbox_id": inbox_id},
+                    {"note": "no phone in payload and could not resolve contact_id via API", "user_id": user_id, "account_id": account_id},
                 )
                 return {"ok": True}
 
-            # ✅ token para ler contato no Chatwoot:
-            # - ideal: salvar chatwoot_api_token no TenantIntegration (por tenant)
-            # - rápido: usar um token global admin em settings
-            chatwoot_token = getattr(integration, "chatwoot_api_token", None) or getattr(settings, "CHATWOOT_API_TOKEN_GLOBAL", None)
-
             if not chatwoot_token:
-                _log_ignore("missing_chatwoot_token_for_lookup", {"user_id": user_id, "account_id": account_id, "contact_id": contact_id})
+                _log_ignore("missing_chatwoot_token_for_lookup", {"user_id": user_id})
                 return {"ok": True}
 
             cw = ChatwootService(
@@ -269,11 +318,13 @@ async def chatwoot_events(
             if not raw_phone:
                 _log_ignore(
                     "missing_recipient_phone",
-                    {"note": "contact fetched but phone empty", "contact_id": contact_id, "user_id": user_id},
+                    {"note": "contact fetched but phone empty", "contact_id": contact_id},
                 )
                 return {"ok": True}
 
         to_phone = _normalize_phone_for_evolution(raw_phone)
+
+        # ... (continua para o passo 8 normalmente)
 
 
         # 8) detectar se é texto ou áudio

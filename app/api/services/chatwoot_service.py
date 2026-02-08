@@ -229,6 +229,19 @@ class ChatwootService:
             return int(v) if v is not None else None
         except Exception:
             return None
+    # No final da classe ChatwootService, junto com os métodos de conversation
+
+    def get_conversation(self, conversation_id: int) -> Dict[str, Any]:
+        """
+        Busca os dados completos de uma conversa específica.
+        Essencial quando o webhook não traz o contact_id.
+        """
+        path = f"/api/v1/accounts/{self.account_id}/conversations/{conversation_id}"
+        url = self._url(path)
+
+        r = requests.get(url, headers=self._headers(), timeout=30)
+        self._raise(r, "Chatwoot get_conversation failed")
+        return r.json()
 
 
 
