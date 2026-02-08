@@ -8,7 +8,6 @@ from app.core.config import settings
 
 class EvolutionService:
     def __init__(self, base_url: str = None, api_key: str = None):
-        # Permite instanciar com credenciais específicas ou usar as do settings
         self.base_url = (base_url or settings.EVOLUTION_BASE_URL).rstrip("/")
         self.api_key = api_key or settings.EVOLUTION_API_KEY
 
@@ -23,15 +22,12 @@ class EvolutionService:
         try:
             r = requests.post(url, json=payload, headers=self._headers(), timeout=timeout)
             
-            # Se a rota V1 falhar com 404, não levanta erro imediatamente se pudermos tentar V2
-            # Mas aqui vamos assumir que o método chamador decide a estratégia
+            # Se for 404 ou 405 (Method Not Allowed), lançamos exceção específica para permitir fallback
+            if r.status_code in (404, 405):
+                raise FileNotFoundError(f"{r.status_code} Not Found/Method: {url}")
+            
+            # Se for erro de aplicação (400, 401, 500)
             if r.status_code >= 400:
-                # Retorna o erro para ser tratado ou logado
-                # Se for 404, lançamos uma exception específica para permitir fallback
-                if r.status_code == 404:
-                    raise FileNotFoundError(f"404 Not Found: {url}")
-                
-                # Outros erros (400, 401, 500)
                 try:
                     error_data = r.json()
                 except:
@@ -41,7 +37,7 @@ class EvolutionService:
             return r.json()
         except requests.RequestException as e:
             raise RuntimeError(f"Evolution Connection Error: {str(e)}")
-
+    
     def _get(self, path: str, params: Dict[str, Any] = None, timeout: int = 20) -> Dict[str, Any]:
         url = f"{self.base_url}{path}"
         try:
@@ -57,7 +53,6 @@ class EvolutionService:
 
     @staticmethod
     def create_instance(instance_name: str, number: str, qrcode: bool, integration: str):
-        # Método estático mantido para compatibilidade, mas idealmente use instância
         svc = EvolutionService()
         return svc._post("/instance/create", {
             "instanceName": instance_name,
@@ -102,29 +97,27 @@ class EvolutionService:
             "webhook_base64": webhook_base64,
             "events": events,
         }
-        # Tenta rota padrão V1/V2 (geralmente é /webhook/set/{instance} ou /webhook/instance/{instance})
         try:
             return svc._post(f"/webhook/set/{instance_name}", payload)
         except FileNotFoundError:
-            # Fallback para rota alternativa comum
-            return svc._post(f"/webhook/instance/{instance_name}", payload)
+            try:
+                return svc._post(f"/webhook/instance/{instance_name}", payload)
+            except FileNotFoundError:
+                # Fallback Query Param
+                return svc._post(f"/webhook/instance?instanceName={instance_name}", payload)
 
     @staticmethod
     def find_webhook(instance_name: str):
         svc = EvolutionService()
-        try:
-            return svc._get(f"/webhook/find/{instance_name}")
-        except Exception:
-            # Tenta rota alternativa
-            return svc._get(f"/webhook/instance/{instance_name}")
+        return svc._get(f"/webhook/find/{instance_name}")
 
     # ======================
-    # Messaging (Refatorado para V1 e V2)
+    # Messaging (Estratégia Tripla)
     # ======================
 
     @classmethod
     def send_text(cls, instance_name: str, to_number: str, text: str):
-        svc = cls()  # Cria instância se chamado estaticamente
+        svc = cls()
         payload = {
             "number": to_number,
             "text": text,
@@ -132,45 +125,55 @@ class EvolutionService:
             "linkPreview": True
         }
         
-        # Estratégia de Fallback: V1 -> V2
+        # 1. Tenta V1 (Padrão: /message/sendText/{instance})
         try:
-            # Tenta V1 (mais comum nas instalações atuais)
             return svc._post(f"/message/sendText/{instance_name}", payload)
         except FileNotFoundError:
-            # Tenta V2 (padrão novo)
+            pass # Tenta próxima estratégia
+
+        # 2. Tenta V2 (Novo Padrão: /message/send/text/{instance})
+        try:
             return svc._post(f"/message/send/text/{instance_name}", payload)
+        except FileNotFoundError:
+            pass # Tenta próxima estratégia
+
+        # 3. Tenta Legacy/QueryParam (/message/sendText?instanceName={instance})
+        # Algumas versões exigem isso
+        return svc._post(f"/message/sendText?instanceName={instance_name}", payload)
 
     @classmethod
     def send_audio(cls, instance_name: str, to_number: str, audio_url: str):
         svc = cls()
         
-        # Payload V1
-        payload_v1 = {
+        # Payload comum
+        payload = {
             "number": to_number,
             "audio": audio_url,
-            "delay": 1200
+            "delay": 1200,
+            "recordinAudio": True 
         }
         
+        # 1. Tenta V1 (/message/sendWhatsAppAudio/{instance})
         try:
-            # Tenta V1 (/message/sendWhatsAppAudio ou /message/sendAudio)
-            try:
-                return svc._post(f"/message/sendWhatsAppAudio/{instance_name}", payload_v1)
-            except FileNotFoundError:
-                return svc._post(f"/message/sendAudio/{instance_name}", payload_v1)
-                
+            return svc._post(f"/message/sendWhatsAppAudio/{instance_name}", payload)
         except FileNotFoundError:
-            # Tenta V2
-            payload_v2 = {
-                "number": to_number,
-                "audio": audio_url,
-                "recordinAudio": True, # Força aparecer como gravado na hora
-                "delay": 1200
-            }
-            return svc._post(f"/message/send/audio/{instance_name}", payload_v2)
+            pass
+
+        # 2. Tenta V1 Alternativa (/message/sendAudio/{instance})
+        try:
+            return svc._post(f"/message/sendAudio/{instance_name}", payload)
+        except FileNotFoundError:
+            pass
+            
+        # 3. Tenta V2 (/message/send/audio/{instance})
+        try:
+            return svc._post(f"/message/send/audio/{instance_name}", payload)
+        except FileNotFoundError:
+            pass
+
+        # 4. Tenta Legacy/QueryParam
+        return svc._post(f"/message/sendWhatsAppAudio?instanceName={instance_name}", payload)
 
     @classmethod
     def send_audio_url(cls, instance_name: str, to: str, audio_url: str, ptt: bool = True):
-        """
-        Alias para compatibilidade. O Evolution já lida com URLs em send_audio.
-        """
         return cls.send_audio(instance_name, to, audio_url)
