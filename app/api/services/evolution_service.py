@@ -137,32 +137,38 @@ class EvolutionService:
     # ======================
 
     @staticmethod
-    def send_text(instance_name: str, number_digits: str, text: str):
-        """
-        Envia texto para um número.
-        number_digits: ex '553491757669'
-        """
+    def send_text(instance_name: str, to_number: str, text: str):
         payload = {
-            "number": number_digits,
+            "number": to_number,
             "text": text,
         }
 
-        # Variam por build do Evolution:
         candidate_paths = [
             f"/message/sendText/{instance_name}",
-            f"/message/sendText/{instance_name}/",   # alguns servers são chatos com slash
-            "/message/sendText",                    # fallback (se aceitar instanceName no body)
+            f"/message/sendText?instanceName={instance_name}",
+            f"/message/sendText/{instance_name}/",
+            f"/message/sendText",
+            f"/message/sendText?instance={instance_name}",
         ]
 
-        # fallback extra: se build exigir instanceName no body
-        try_payload = dict(payload)
-        try_payload["instanceName"] = instance_name
+        return EvolutionService._try_post(candidate_paths, json=payload, timeout=30)
+    
+    @staticmethod
+    def send_audio(instance_name: str, to_number: str, audio_url: str):
+        payload = {
+            "number": to_number,
+            "audio": audio_url,  # alguns builds usam "audio", outros "url"
+            "url": audio_url,
+        }
 
-        try:
-            return EvolutionService._try_post(candidate_paths[:2], json=payload, timeout=30)
-        except Exception:
-            return EvolutionService._try_post(candidate_paths[2:], json=try_payload, timeout=30)
+        candidate_paths = [
+            f"/message/sendAudio/{instance_name}",
+            f"/message/sendAudio?instanceName={instance_name}",
+            f"/message/sendAudio",
+        ]
 
+        return EvolutionService._try_post(candidate_paths, json=payload, timeout=45)
+    
     @staticmethod
     def send_audio_url(instance_name: str, number_digits: str, audio_url: str, ptt: bool = False):
         """
