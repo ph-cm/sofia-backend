@@ -255,7 +255,13 @@ async def chatwoot_events(
             return {"ok": True}
 
         instance_name = str(integration.evolution_instance_id)
-
+        
+       # --- DEBUG DE EMERGÊNCIA ---
+        token_integration = getattr(integration, "chatwoot_api_token", "NÃO TEM NA INTEGRAÇÃO")
+        token_settings = getattr(settings, "CHATWOOT_API_TOKEN", "NÃO TEM NO SETTINGS")
+        
+        print(f"DEBUG TOKEN REAL: Integration=[{token_integration}] Settings=[{token_settings}]")
+        # ---------------------------
        # 7) extrai telefone do destinatário
         raw_phone = _extract_recipient_phone(payload, conv)
         
