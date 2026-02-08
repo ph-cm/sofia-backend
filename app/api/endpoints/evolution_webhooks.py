@@ -6,6 +6,8 @@ from typing import Any, Dict, Optional
 from app.core.config import settings
 from app.api.services.chatwoot_service import ChatwootService
 from app.api.services.tenant_service import TenantService
+from app.db.session import SessionLocal
+from app.api.services.conversation_map_service import ConversationMapService
 
 router = APIRouter(prefix="/webhooks/evolution", tags=["Evolution Webhooks"])
 
@@ -269,6 +271,37 @@ async def evolution_webhook(event: str, request: Request):
         if not conv_id:
             log_err(instance_name, "stop_no_conversation_id", {"note": "Chatwoot respondeu sem id para conversa"})
             return {"ok": True, "ignored": "chatwoot_no_conversation_id"}
+                # 2) conversa
+        conv = cw.get_or_create_conversation(inbox_id=int(tenant["chatwoot_inbox_id"]), contact_id=int(contact_id))
+        conv_id = safe_extract_id(conv, "conversation", instance_name)
+        log_info(instance_name, "chatwoot_conversation_result", {"conversation_id": conv_id, "inbox_id": tenant.get("chatwoot_inbox_id")})
+
+        if not conv_id:
+            log_err(instance_name, "stop_no_conversation_id", {"note": "Chatwoot respondeu sem id para conversa"})
+            return {"ok": True, "ignored": "chatwoot_no_conversation_id"}
+                # ✅ salva mapping (conversation -> phone) para o outgoing do Chatwoot conseguir enviar no WhatsApp
+        try:
+            db = SessionLocal()
+            try:
+                ConversationMapService.upsert_map(
+                    db=db,
+                    chatwoot_account_id=int(tenant["chatwoot_account_id"]),
+                    chatwoot_conversation_id=int(conv_id),
+                    wa_phone_digits=str(phone),
+                )
+                log_info(
+                    instance_name,
+                    "cw_map_saved",
+                    {
+                        "account_id": int(tenant["chatwoot_account_id"]),
+                        "conversation_id": int(conv_id),
+                        "phone": phone,
+                    },
+                )
+            finally:
+                db.close()
+        except Exception as e:
+            log_err(instance_name, "cw_map_save_failed", {"error": repr(e), "conversation_id": conv_id})
 
         # 3) mensagem
         created = None
