@@ -178,11 +178,10 @@ async def chatwoot_events(request: Request, secret: str = Query(default="")):
             finally:
                 db_map.close()
 
-        # Tentativa 3: API do Chatwoot (Fallback Final)
+        # Tentativa 3: API do Chatwoot (Fallback Final com Debug e Múltiplas Estratégias)
         if not raw_phone:
             chatwoot_token = getattr(integration, "chatwoot_api_token", None) or getattr(settings, "CHATWOOT_API_TOKEN", None)
             
-            # LOG DE DEBUG CRÍTICO: Mostra se temos Token e ID para fazer a chamada
             _log_info("api_fallback_check", {
                 "token_present": bool(chatwoot_token), 
                 "conv_id": conversation_id
@@ -196,36 +195,59 @@ async def chatwoot_events(request: Request, secret: str = Query(default="")):
                         account_id=account_id,
                     )
                     full_conv = cw_temp.get_conversation(conversation_id)
-                    
-                    # Tenta pegar do objeto 'contact' dentro de 'meta'
-                    meta = full_conv.get("meta", {})
-                    contact_obj = meta.get("contact")
-                    
-                    if isinstance(contact_obj, dict):
-                        # Pega o telefone direto do objeto de contato retornado
-                        raw_phone = contact_obj.get("phone_number")
-                        if raw_phone:
-                            _log_info("phone_resolved_via_api_meta", {"phone": raw_phone})
-                            
-                            # Salva no Map para a próxima vez (Self-Healing)
-                            try:
-                                db_save = SessionLocal()
-                                ConversationMapService.upsert_map(
-                                    db=db_save,
-                                    chatwoot_account_id=int(account_id),
-                                    chatwoot_conversation_id=int(conversation_id),
-                                    wa_phone_digits=_normalize_phone_for_evolution(raw_phone),
-                                )
-                                db_save.commit()
-                                db_save.close()
-                            except: pass
 
-                    # Se ainda não achou, tenta pelo contact_id
+                    # --- DEBUG: Imprime o começo do JSON para vermos a estrutura real ---
+                    import json
+                    try:
+                        # Imprime os primeiros 600 caracteres para não poluir demais, mas mostrar o inicio
+                        print(f"DEBUG_API_RESPONSE: {json.dumps(full_conv, default=str)[:600]}")
+                    except: 
+                        print("DEBUG_API_RESPONSE: (erro ao converter json)")
+                    # -------------------------------------------------------------------
+                    
+                    # Estratégia 3.A: contact_inbox -> source_id (Geralmente é o telefone/UID no WhatsApp)
+                    ci = full_conv.get("contact_inbox")
+                    if isinstance(ci, dict):
+                        raw_phone = ci.get("source_id")
+                        if raw_phone: _log_info("phone_found_in_contact_inbox", {"val": raw_phone})
+
+                    # Estratégia 3.B: meta -> sender -> phone_number
+                    if not raw_phone:
+                        meta = full_conv.get("meta", {})
+                        sender = meta.get("sender")
+                        if isinstance(sender, dict):
+                            raw_phone = sender.get("phone_number")
+                            if raw_phone: _log_info("phone_found_in_meta_sender", {"val": raw_phone})
+
+                    # Estratégia 3.C: meta -> contact -> phone_number
+                    if not raw_phone:
+                        meta = full_conv.get("meta", {})
+                        contact_obj = meta.get("contact")
+                        if isinstance(contact_obj, dict):
+                            raw_phone = contact_obj.get("phone_number")
+                            if raw_phone: _log_info("phone_found_in_meta_contact", {"val": raw_phone})
+
+                    # Estratégia 3.D: Busca ID do contato e faz nova chamada (O mais lento, mas garantido)
                     if not raw_phone:
                         cid_temp = _extract_contact_id(full_conv)
                         if cid_temp:
+                            _log_info("fetching_contact_directly", {"contact_id": cid_temp})
                             c_data = cw_temp.get_contact(cid_temp)
                             raw_phone = ChatwootService.extract_phone_from_contact(c_data)
+
+                    # Se achou em qualquer estratégia, salva no Map (Self-Healing)
+                    if raw_phone:
+                        try:
+                            db_save = SessionLocal()
+                            ConversationMapService.upsert_map(
+                                db=db_save,
+                                chatwoot_account_id=int(account_id),
+                                chatwoot_conversation_id=int(conversation_id),
+                                wa_phone_digits=_normalize_phone_for_evolution(raw_phone),
+                            )
+                            db_save.commit()
+                            db_save.close()
+                        except: pass
 
                 except Exception as ex_api:
                     _log_err("api_fallback_failed", {"error": str(ex_api)})
