@@ -278,19 +278,28 @@ async def chatwoot_events(
                             api_token=chatwoot_token,
                             account_id=account_id,
                         )
-                        # Busca a conversa completa na API
                         full_conv_data = cw_temp.get_conversation(conversation_id)
                         
-                        # Tenta extrair o contact_id da resposta da API
-                        # O Chatwoot costuma mandar em meta.sender.id ou contact_inbox.contact_id
+                        # --- CORREÇÃO AQUI ---
+                        # A API do Chatwoot retorna 'meta': {'contact': {...}} com os dados do cliente
                         meta = full_conv_data.get("meta", {})
-                        sender = meta.get("sender", {})
-                        contact_id = sender.get("id")
                         
+                        # 1. Tenta pegar direto do objeto 'contact' dentro de meta (Onde o cliente real fica)
+                        contact_obj = meta.get("contact")
+                        if isinstance(contact_obj, dict):
+                            contact_id = contact_obj.get("id")
+                            # Bônus: Se já tiver o telefone aqui, já pegamos!
+                            if not raw_phone:
+                                raw_phone = contact_obj.get("phone_number")
+
+                        # 2. Se falhar, tenta pegar do contact_inbox
                         if not contact_id:
-                            # Tenta fallback para contact_inbox
                             contact_id = _extract_contact_id(full_conv_data)
-                            
+                        
+                        # Debug: Se falhar, vamos ver o que veio
+                        if not contact_id:
+                             _log_info("api_response_debug", {"keys": list(full_conv_data.keys()), "meta_keys": list(meta.keys())})
+
                     except Exception as e:
                         _log_err("failed_fetching_conversation", {"error": str(e)})
             # -------------------------------------------------------------------------------
