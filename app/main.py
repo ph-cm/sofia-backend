@@ -12,6 +12,7 @@ from app.api.endpoints import tenant_provision
 from app.api.endpoints import evolution
 from app.api.endpoints import evolution_webhooks
 from app.api.endpoints import tenant_evolution
+from app.api.endpoints import chatwoot_provisioning
 
 app = FastAPI(
     title="SaaS Secretaria Inteligente",
@@ -49,6 +50,7 @@ app.include_router(tenant_provision.router)
 app.include_router(evolution.router)
 app.include_router(evolution_webhooks.router)
 app.include_router(tenant_evolution.router)
+app.include_router(chatwoot_provisioning.router)
 
 # Exemplo: Usando uma variável de configuração
 @app.get("/")

@@ -189,7 +189,7 @@ class EvolutionService:
         last_error = None
         for route in routes:
             try:
-                return svc._post(route, payload)
+                return svc._post(route, payload)                                                                                                                        
             except FileNotFoundError as e:
                 last_error = e
                 continue
