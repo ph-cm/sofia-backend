@@ -22,8 +22,8 @@ class UserCreate(BaseModel):
     valor_consulta: Optional[int] = 0
     ativo: Optional[bool] = True
     
-    bio_profissional: Optional[str] = None
-    especialidade: Optional[str] = None
+    #bio_profissional: Optional[str] = None
+    #especialidade: Optional[str] = None
     
     @field_validator("inbox_id", mode="before")
     @classmethod
