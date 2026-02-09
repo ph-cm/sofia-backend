@@ -15,7 +15,6 @@ router = APIRouter(prefix="/provision", tags=["Provisioning"])
 
 class ProvisionChatwootInboxIn(BaseModel):
     user_id: int
-    # opcional: nome custom do inbox no Chatwoot
     inbox_name: str | None = None
 
 
@@ -29,63 +28,69 @@ class ProvisionChatwootInboxOut(BaseModel):
 
 @router.post("/chatwoot/inbox", response_model=ProvisionChatwootInboxOut)
 def provision_chatwoot_inbox(payload: ProvisionChatwootInboxIn, db: Session = Depends(get_db)):
-    # 1) valida user
     user = db.query(User).filter(User.id == payload.user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="user_not_found")
 
-    # 2) se já tem inbox_id, não recria
+    account_id = int(settings.CHATWOOT_ACCOUNT_ID)
+
+    # Se já tem inbox, só garante que a integração existe (self-healing)
     if user.inbox_id and int(user.inbox_id) > 0:
+        TenantIntegrationService.bind_chatwoot(
+            db=db,
+            user_id=user.id,
+            chatwoot_account_id=account_id,
+            chatwoot_inbox_id=int(user.inbox_id),
+            chatwoot_inbox_identifier=None,
+        )
         return ProvisionChatwootInboxOut(
             ok=True,
             user_id=user.id,
-            chatwoot_account_id=int(settings.CHATWOOT_ACCOUNT_ID),
+            chatwoot_account_id=account_id,
             inbox_id=int(user.inbox_id),
             inbox_identifier=None,
         )
 
-    # 3) cria inbox no Chatwoot usando token global/admin
+    # cria inbox no Chatwoot com token global/admin
     cw = ChatwootService(
         base_url=settings.CHATWOOT_BASE_URL,
-        api_token=settings.CHATWOOT_API_TOKEN,  # ✅ token admin/global
-        account_id=int(settings.CHATWOOT_ACCOUNT_ID),
+        api_token=settings.CHATWOOT_API_TOKEN,
+        account_id=account_id,
     )
 
     inbox_name = payload.inbox_name or f"medico_{user.id}_{user.nome}"
-
     created = cw.create_api_inbox(name=inbox_name)
-    inbox_id = ChatwootService._extract_id(created)
 
+    inbox_id = ChatwootService._extract_id(created)
     if not inbox_id:
         raise HTTPException(status_code=502, detail=f"chatwoot_inbox_create_failed: {created}")
 
     inbox_identifier = None
     if isinstance(created, dict):
-        inbox_identifier = (
-            created.get("identifier")
-            or (created.get("channel") or {}).get("identifier")  # fallback
-        )
+        # Chatwoot retorna inbox_identifier no root
+        inbox_identifier = created.get("inbox_identifier") or created.get("identifier")
 
-    # 4) salva em users.inbox_id
+    # ATÔMICO: atualiza user + integração e dá commit uma vez (bind_chatwoot já commita)
+    # então: primeiro coloca no user (sem commit), depois bind_chatwoot (commit final).
     user.inbox_id = int(inbox_id)
     db.add(user)
-    db.commit()
-    db.refresh(user)
+    db.flush()  # não commita, só prepara
 
-    # 5) salva/atualiza tenant_integrations (roteamento multi-tenant)
     TenantIntegrationService.bind_chatwoot(
         db=db,
         user_id=user.id,
-        chatwoot_account_id=int(settings.CHATWOOT_ACCOUNT_ID),
+        chatwoot_account_id=account_id,
         chatwoot_inbox_id=int(inbox_id),
-        chatwoot_inbox_identifier=str(inbox_identifier or ""),
-        # evolution_instance_id / evolution_phone ficam como já estão (se quiser setar aqui, passe também)
+        chatwoot_inbox_identifier=inbox_identifier,
     )
+
+    # bind_chatwoot já commitou; garante refresh do user também
+    db.refresh(user)
 
     return ProvisionChatwootInboxOut(
         ok=True,
         user_id=user.id,
-        chatwoot_account_id=int(settings.CHATWOOT_ACCOUNT_ID),
+        chatwoot_account_id=account_id,
         inbox_id=int(inbox_id),
         inbox_identifier=inbox_identifier,
     )
