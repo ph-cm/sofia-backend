@@ -93,6 +93,37 @@ class ChatwootService:
                     return vid
 
         return None
+    
+        # ---------- Inboxes ----------
+
+    def create_api_inbox(self, name: str) -> Dict[str, Any]:
+        """
+        Cria um inbox do tipo API no Chatwoot.
+        Esse inbox será usado para receber e enviar mensagens via API/webhooks.
+        """
+        path = f"/api/v1/accounts/{self.account_id}/inboxes"
+        url = self._url(path)
+
+        payload = {
+            "name": name,
+            "channel": {
+                "type": "api"
+            }
+        }
+
+        r = requests.post(url, json=payload, headers=self._headers(), timeout=30)
+        self._raise(r, "Chatwoot create_api_inbox failed")
+        data = r.json()
+        self._log_http("POST", path, r, data)
+
+        # Normaliza retorno: pode vir {"payload": {...}} dependendo da versão
+        unwrapped = self._unwrap_payload(data)
+
+        inbox_id = self._extract_id(unwrapped)
+        print("CHATWOOT_INBOX_CREATED:", {"id": inbox_id, "name": name})
+
+        return unwrapped if isinstance(unwrapped, dict) else {"raw": unwrapped}
+
 
     # ---------- Contacts ----------
 
@@ -237,51 +268,51 @@ class ChatwootService:
         self._raise(r, "Chatwoot get_conversation failed")
         return r.json()
     
-    def create_inbox_api(
-        self,
-        name: str,
-        webhook_url: str,
-        webhook_secret: str,
-    ) -> Dict[str, Any]:
-        """
-        Cria um Inbox do tipo "API" (Channel::Api).
-        - Esse é o inbox ideal quando você controla todo o WhatsApp via Evolution,
-          e só quer o Chatwoot como UI/roteador interno.
-        - O Chatwoot vai chamar seu webhook quando mensagens outgoing forem enviadas.
-        """
-        path = f"/api/v1/accounts/{self.account_id}/inboxes"
-        url = self._url(path)
+    # def create_inbox_api(
+    #     self,
+    #     name: str,
+    #     webhook_url: str,
+    #     webhook_secret: str,
+    # ) -> Dict[str, Any]:
+    #     """
+    #     Cria um Inbox do tipo "API" (Channel::Api).
+    #     - Esse é o inbox ideal quando você controla todo o WhatsApp via Evolution,
+    #       e só quer o Chatwoot como UI/roteador interno.
+    #     - O Chatwoot vai chamar seu webhook quando mensagens outgoing forem enviadas.
+    #     """
+    #     path = f"/api/v1/accounts/{self.account_id}/inboxes"
+    #     url = self._url(path)
 
-        payload = {
-            "name": name,
-            "channel": {
-                "type": "api",
-                "webhook_url": webhook_url,
-                "webhook_secret": webhook_secret,
-            },
-        }
+    #     payload = {
+    #         "name": name,
+    #         "channel": {
+    #             "type": "api",
+    #             "webhook_url": webhook_url,
+    #             "webhook_secret": webhook_secret,
+    #         },
+    #     }
 
-        r = requests.post(url, json=payload, headers=self._headers(), timeout=30)
-        self._raise(r, "Chatwoot create_inbox_api failed")
-        data = r.json()
-        self._log_http("POST", path, r, data)
+    #     r = requests.post(url, json=payload, headers=self._headers(), timeout=30)
+    #     self._raise(r, "Chatwoot create_inbox_api failed")
+    #     data = r.json()
+    #     self._log_http("POST", path, r, data)
 
-        # Normaliza possíveis wrappers
-        inbox_obj = self._unwrap_payload(data)
+    #     # Normaliza possíveis wrappers
+    #     inbox_obj = self._unwrap_payload(data)
 
-        inbox_id = self._extract_id(inbox_obj)
-        # identifier varia por versão; guardamos o que existir
-        inbox_identifier = None
-        if isinstance(inbox_obj, dict):
-            inbox_identifier = (
-                inbox_obj.get("inbox_identifier")
-                or inbox_obj.get("identifier")
-                or inbox_obj.get("channel_id")
-                or inbox_obj.get("channel", {}).get("identifier") if isinstance(inbox_obj.get("channel"), dict) else None
-            )
+    #     inbox_id = self._extract_id(inbox_obj)
+    #     # identifier varia por versão; guardamos o que existir
+    #     inbox_identifier = None
+    #     if isinstance(inbox_obj, dict):
+    #         inbox_identifier = (
+    #             inbox_obj.get("inbox_identifier")
+    #             or inbox_obj.get("identifier")
+    #             or inbox_obj.get("channel_id")
+    #             or inbox_obj.get("channel", {}).get("identifier") if isinstance(inbox_obj.get("channel"), dict) else None
+    #         )
 
-        print("CHATWOOT_INBOX_CREATED:", {"id": inbox_id, "name": name, "identifier": inbox_identifier})
-        return inbox_obj if isinstance(inbox_obj, dict) else {"raw": inbox_obj}
+    #     print("CHATWOOT_INBOX_CREATED:", {"id": inbox_id, "name": name, "identifier": inbox_identifier})
+    #     return inbox_obj if isinstance(inbox_obj, dict) else {"raw": inbox_obj}
 
 
 
