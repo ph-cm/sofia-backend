@@ -5,11 +5,11 @@ from app.db.base_class import Base
 class TenantIntegration(Base):
     __tablename__ = "tenant_integrations"
     __table_args__ = (
-        UniqueConstraint("user_id", name="uq_tenant_integrations_user_id"),
-        UniqueConstraint("chatwoot_account_id", name="uq_tenant_integrations_chatwoot_account_id"),
-        UniqueConstraint("chatwoot_inbox_id", name="uq_tenant_integrations_chatwoot_inbox_id"),
-        UniqueConstraint("evolution_instance_id", name="uq_tenant_integrations_evolution_instance_id"),
-    )
+    UniqueConstraint("user_id", name="uq_tenant_integrations_user_id"),
+    UniqueConstraint("chatwoot_inbox_id", name="uq_tenant_integrations_chatwoot_inbox_id"),
+    UniqueConstraint("evolution_instance_id", name="uq_tenant_integrations_evolution_instance_id"),
+)
+
 
     id = Column(Integer, primary_key=True, index=True)
 

@@ -24,26 +24,33 @@ class TenantIntegrationService:
             integration = TenantIntegration(user_id=user_id)
             db.add(integration)
 
-        hijack = (
-            db.query(TenantIntegration)
-            .filter(
-                TenantIntegration.chatwoot_account_id == chatwoot_account_id,
-                TenantIntegration.user_id != user_id,
-            )
-            .first()
-        )
+        hijack = db.query(TenantIntegration).filter(
+            TenantIntegration.chatwoot_account_id == chatwoot_account_id,
+            TenantIntegration.user_id != user_id,
+        ).first()
         if hijack:
-            raise HTTPException(
-                status_code=409,
-                detail="chatwoot_account_id already bound to another tenant",
-            )
+            raise 409
+
 
         integration.chatwoot_account_id = chatwoot_account_id
         integration.chatwoot_inbox_id = chatwoot_inbox_id
         integration.chatwoot_inbox_identifier = chatwoot_inbox_identifier
 
         if evolution_instance_id:
-            integration.evolution_instance_id = evolution_instance_id
+            hijack_evo = (
+                db.query(TenantIntegration)
+                .filter(
+                    TenantIntegration.evolution_instance_id == evolution_instance_id,
+                    TenantIntegration.user_id != user_id,
+                )
+                .first()
+            )
+            if hijack_evo:
+                raise HTTPException(
+                    status_code=409,
+                    detail="evolution_instance_id already bound to another tenant",
+                )
+
         if evolution_phone:
             integration.evolution_phone = evolution_phone
 
