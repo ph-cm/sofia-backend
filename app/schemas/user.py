@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional
 
 # =========================
@@ -24,6 +24,18 @@ class UserCreate(BaseModel):
     
     bio_profissional: Optional[str] = None
     especialidade: Optional[str] = None
+    
+    @field_validator("inbox_id", mode="before")
+    @classmethod
+    def normalize_inbox_id(cls, v):
+        # ✅ aceita 0, "", None etc e vira None
+        if v in (0, "0", "", None):
+            return None
+        try:
+            iv = int(v)
+            return iv if iv > 0 else None
+        except Exception:
+            return None
 
 # =========================
 # Login (inalterado)
@@ -72,3 +84,4 @@ class UserUpdate(BaseModel):
     duracao_consulta: Optional[int] = None
     valor_consulta: Optional[float] = None
     ativo: Optional[bool] = None
+

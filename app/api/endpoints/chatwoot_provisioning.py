@@ -1,95 +1,91 @@
-# app/api/endpoints/chatwoot_provisioning.py
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
+from app.db.session import get_db
 from app.core.config import settings
-from app.db.session import SessionLocal
+from app.api.models.user import User
 from app.api.services.chatwoot_service import ChatwootService
 from app.api.services.tenant_integration_service import TenantIntegrationService
-
 
 router = APIRouter(prefix="/provision", tags=["Provisioning"])
 
 
 class ProvisionChatwootInboxIn(BaseModel):
     user_id: int
-    inbox_name: str
-    evolution_instance_id: str  # ex: "tenant_2"
+    # opcional: nome custom do inbox no Chatwoot
+    inbox_name: str | None = None
 
 
 class ProvisionChatwootInboxOut(BaseModel):
+    ok: bool
     user_id: int
     chatwoot_account_id: int
-    chatwoot_inbox_id: int
-    chatwoot_inbox_identifier: str | None
-    evolution_instance_id: str
+    inbox_id: int
+    inbox_identifier: str | None = None
 
 
 @router.post("/chatwoot/inbox", response_model=ProvisionChatwootInboxOut)
-def provision_chatwoot_inbox(payload: ProvisionChatwootInboxIn):
-    """
-    Cria um inbox (Channel API) no Chatwoot e salva o binding no tenant_integrations.
-    Isso é o multi-tenant: 1 inbox por médico.
-    """
-    if not getattr(settings, "CHATWOOT_BASE_URL", None):
-        raise HTTPException(status_code=500, detail="CHATWOOT_BASE_URL not configured")
-    if not getattr(settings, "CHATWOOT_ADMIN_API_TOKEN", None):
-        raise HTTPException(status_code=500, detail="CHATWOOT_ADMIN_API_TOKEN not configured")
-    if not getattr(settings, "CHATWOOT_ACCOUNT_ID", None):
-        raise HTTPException(status_code=500, detail="CHATWOOT_ACCOUNT_ID not configured")
-    if not getattr(settings, "CHATWOOT_WEBHOOK_SECRET", None):
-        raise HTTPException(status_code=500, detail="CHATWOOT_WEBHOOK_SECRET not configured")
+def provision_chatwoot_inbox(payload: ProvisionChatwootInboxIn, db: Session = Depends(get_db)):
+    # 1) valida user
+    user = db.query(User).filter(User.id == payload.user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="user_not_found")
 
-    account_id = int(settings.CHATWOOT_ACCOUNT_ID)
+    # 2) se já tem inbox_id, não recria
+    if user.inbox_id and int(user.inbox_id) > 0:
+        return ProvisionChatwootInboxOut(
+            ok=True,
+            user_id=user.id,
+            chatwoot_account_id=int(settings.CHATWOOT_ACCOUNT_ID),
+            inbox_id=int(user.inbox_id),
+            inbox_identifier=None,
+        )
 
-    # Webhook do Chatwoot -> seu backend (outgoing)
-    # O Chatwoot vai chamar isso quando você mandar msg pela UI dele.
-    webhook_url = f"{settings.PUBLIC_BASE_URL.rstrip('/')}/integrations/chatwoot/events?secret={settings.CHATWOOT_WEBHOOK_SECRET}"
-
+    # 3) cria inbox no Chatwoot usando token global/admin
     cw = ChatwootService(
         base_url=settings.CHATWOOT_BASE_URL,
-        api_token=settings.CHATWOOT_ADMIN_API_TOKEN,
-        account_id=account_id,
+        api_token=settings.CHATWOOT_API_TOKEN_GLOBAL,  # ✅ token admin/global
+        account_id=int(settings.CHATWOOT_ACCOUNT_ID),
     )
 
-    inbox_obj = cw.create_inbox_api(
-        name=payload.inbox_name,
-        webhook_url=webhook_url,
-        webhook_secret=settings.CHATWOOT_WEBHOOK_SECRET,
-    )
+    inbox_name = payload.inbox_name or f"medico_{user.id}_{user.nome}"
 
-    inbox_id = ChatwootService._extract_id(inbox_obj)
+    created = cw.create_api_inbox(name=inbox_name)
+    inbox_id = ChatwootService._extract_id(created)
+
     if not inbox_id:
-        raise HTTPException(status_code=500, detail="Chatwoot returned no inbox_id")
+        raise HTTPException(status_code=502, detail=f"chatwoot_inbox_create_failed: {created}")
 
-    inbox_identifier = (
-        inbox_obj.get("inbox_identifier")
-        or inbox_obj.get("identifier")
-        or inbox_obj.get("channel_id")
-        or (inbox_obj.get("channel", {}) or {}).get("identifier")
-        if isinstance(inbox_obj, dict)
-        else None
-    )
-
-    db = SessionLocal()
-    try:
-        integration = TenantIntegrationService.bind_chatwoot(
-            db=db,
-            user_id=payload.user_id,
-            chatwoot_account_id=account_id,
-            chatwoot_inbox_id=int(inbox_id),
-            chatwoot_inbox_identifier=str(inbox_identifier) if inbox_identifier else "",
-            evolution_instance_id=payload.evolution_instance_id,
+    inbox_identifier = None
+    if isinstance(created, dict):
+        inbox_identifier = (
+            created.get("identifier")
+            or (created.get("channel") or {}).get("identifier")  # fallback
         )
-    finally:
-        db.close()
+
+    # 4) salva em users.inbox_id
+    user.inbox_id = int(inbox_id)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    # 5) salva/atualiza tenant_integrations (roteamento multi-tenant)
+    TenantIntegrationService.bind_chatwoot(
+        db=db,
+        user_id=user.id,
+        chatwoot_account_id=int(settings.CHATWOOT_ACCOUNT_ID),
+        chatwoot_inbox_id=int(inbox_id),
+        chatwoot_inbox_identifier=str(inbox_identifier or ""),
+        # evolution_instance_id / evolution_phone ficam como já estão (se quiser setar aqui, passe também)
+    )
 
     return ProvisionChatwootInboxOut(
-        user_id=payload.user_id,
-        chatwoot_account_id=account_id,
-        chatwoot_inbox_id=int(inbox_id),
-        chatwoot_inbox_identifier=inbox_identifier,
-        evolution_instance_id=payload.evolution_instance_id,
+        ok=True,
+        user_id=user.id,
+        chatwoot_account_id=int(settings.CHATWOOT_ACCOUNT_ID),
+        inbox_id=int(inbox_id),
+        inbox_identifier=inbox_identifier,
     )

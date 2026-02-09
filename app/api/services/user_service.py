@@ -13,10 +13,15 @@ class UserService:
 
     @staticmethod
     def create_user(db: Session, data):
+        
+        inbox_id = getattr(data, 'inbox_id', None)
+        if not inbox_id or int(inbox_id) <= 0:
+            inbox_id = None
+            
         user = User(
             email=data.email,
             password_hash=get_password_hash(data.password),
-            inbox_id=data.inbox_id,
+            inbox_id=inbox_id,
             nome=data.nome,
             phone_channel=data.phone_channel,
             calendar_id=data.calendar_id,
