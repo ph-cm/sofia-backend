@@ -47,7 +47,7 @@ def provision_chatwoot_inbox(payload: ProvisionChatwootInboxIn, db: Session = De
     # 3) cria inbox no Chatwoot usando token global/admin
     cw = ChatwootService(
         base_url=settings.CHATWOOT_BASE_URL,
-        api_token=settings.CHATWOOT_API_TOKEN_GLOBAL,  # ✅ token admin/global
+        api_token=settings.CHATWOOT_API_TOKEN,  # ✅ token admin/global
         account_id=int(settings.CHATWOOT_ACCOUNT_ID),
     )
 

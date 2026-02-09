@@ -70,7 +70,7 @@ class ProvisioningService:
         # 3) Chatwoot: cria inbox
         cw = ChatwootService(
             base_url=settings.CHATWOOT_BASE_URL,
-            api_token=settings.CHATWOOT_ADMIN_TOKEN,  # token admin/integração
+            api_token=settings.CHATWOOT_API_TOKEN,  # token admin/integração
             account_id=int(settings.CHATWOOT_ACCOUNT_ID),
         )
 
