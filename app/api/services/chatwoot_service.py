@@ -96,6 +96,24 @@ class ChatwootService:
     
         # ---------- Inboxes ----------
 
+    # ---------- MÉTODOS DE PROVISIONAMENTO (USADOS PELO SERVICE) ----------
+
+    @classmethod
+    def create_account(cls, name: str) -> Dict[str, Any]:
+        """
+        ✅ ADICIONADO: Cria uma conta (Tenant) no Chatwoot.
+        É a função que estava faltando e causando o erro 500.
+        """
+        url = f"{cls.BASE_URL}/api/v1/accounts"
+        payload = {"name": name}
+        
+        r = requests.post(url, json=payload, headers=cls._headers(), timeout=30)
+        if r.status_code >= 300:
+            print(f"❌ Erro Chatwoot create_account: {r.status_code} {r.text}")
+            return {}
+        
+        return r.json()
+    
     def create_api_inbox(self, name: str) -> Dict[str, Any]:
         """
         Cria um inbox do tipo API no Chatwoot.
