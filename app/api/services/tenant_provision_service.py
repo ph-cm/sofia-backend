@@ -23,7 +23,8 @@ class TenantProvisionService:
 
         # ...
         if inbox_name:
-            integration.evolution_instance_id = inbox_name
+            integration.evolution_instance_id = inbox_name  # <- AQUI É O QUE VOCÊ QUER
+
 
         # ✅ Agora o commit acontece ANTES do retorno, garantindo o salvamento
         if integration.chatwoot_account_id and integration.chatwoot_inbox_id:

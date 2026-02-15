@@ -4,8 +4,7 @@ from typing import Optional
 class ProvisionChatwootIn(BaseModel):
     user_id: int
     account_name: Optional[str] = None
-    inbox_name: Optional[str] = None
-    evolution_instance_id: Optional[str] = None
+    inbox_name: Optional[str] = None  # usado como instance_id também
 
 class ProvisionChatwootOut(BaseModel):
     ok: bool
