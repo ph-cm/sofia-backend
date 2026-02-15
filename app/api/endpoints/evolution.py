@@ -108,6 +108,44 @@ def evo_instance_state(instance_name: str):
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Evolution error: {str(e)}")
 
+@router.get(
+    "/evolution/instances/{instance_name}/qrcode",
+    response_model=ConnectOut,
+)
+def evo_instance_qrcode(instance_name: str):
+    """
+    Rota salva-vidas: tenta pegar o QRCode em QUALQUER formato possível.
+    Funciona mesmo quando o /connect não retorna o QR.
+    """
+    try:
+        raw = EvolutionService.connection_state(instance_name)
+
+        # tenta todos os formatos possíveis
+        qrcode = (
+            raw.get("qrcode")
+            or raw.get("qrCode")
+            or raw.get("qr_code")
+            or (raw.get("instance") or {}).get("qrcode")
+            or (raw.get("instance") or {}).get("qrCode")
+        )
+
+        qrcode_base64 = (
+            raw.get("qrcode_base64")
+            or raw.get("qrCodeBase64")
+            or (raw.get("instance") or {}).get("qrcode_base64")
+            or (raw.get("instance") or {}).get("qrCodeBase64")
+        )
+
+        return {
+            "ok": True,
+            "instance_name": instance_name,
+            "qrcode": qrcode if isinstance(qrcode, str) else None,
+            "qrcode_base64": qrcode_base64 if isinstance(qrcode_base64, str) else None,
+            "evolution_raw": raw,
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Evolution error: {str(e)}")
 
 @router.get(
     "/instances/{instance_name}/status",
