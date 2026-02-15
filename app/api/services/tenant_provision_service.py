@@ -19,14 +19,18 @@ class TenantProvisionService:
             db.flush()
 
         # 👉 Aqui: inbox_name automaticamente vira evolution_instance_id
+        # app/api/services/tenant_provision_service.py
+
+        # ...
         if inbox_name:
             integration.evolution_instance_id = inbox_name
 
-        # 👉 Se já existe account + inbox, não recria
+        # ✅ Agora o commit acontece ANTES do retorno, garantindo o salvamento
         if integration.chatwoot_account_id and integration.chatwoot_inbox_id:
             db.commit()
             db.refresh(integration)
             return integration
+# ...
 
         # Nome da account
         acct_name = account_name or (user.nome or f"Tenant {user.id}")
