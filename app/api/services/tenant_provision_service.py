@@ -17,7 +17,12 @@ class TenantProvisionService:
             integration = TenantIntegration(user_id=user_id)
             db.add(integration)
             db.flush()  # pega id se precisar
-
+        # --- MODIFICAÇÃO AQUI ---
+        # Se o frontend enviou o inbox_name (que agora é o drkaio_26), 
+        # salvamos ele como o ID da instância do Evolution para o webhook funcionar.
+        if inbox_name:
+            integration.evolution_instance_id = inbox_name
+            
         # Se já provisionou, retorna sem recriar
         if integration.chatwoot_account_id and integration.chatwoot_inbox_id:
             return integration

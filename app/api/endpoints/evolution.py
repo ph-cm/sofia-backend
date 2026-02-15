@@ -69,35 +69,33 @@ def evo_create_instance(payload: CreateInstanceIn):
 
 from fastapi import Query
 
-@router.post("/evolution/instances/{instance_name}/connect")
-def evo_connect(instance_name: str):
+@router.post(
+    "/instances/{instance_name}/connect",
+    response_model=ConnectOut,
+    dependencies=[Depends(verify_n8n_api_key)],
+)
+def evo_connect_instance(
+    instance_name: str,
+    number: str = Query(..., description="Ex: 553499190547 (sem +)"),
+):
     try:
-        data = EvolutionService.connect_instance(instance_name)
+        raw = EvolutionService.connect_instance(instance_name, number)
 
-        # Evolution retorna várias variações possíveis:
-        qrcode = (
-            data.get("qrcode")
-            or data.get("qrCode")
-            or data.get("qr_code")
-            or data.get("base64")  # <------- AQUI! NOVO CAMPO
-        )
-
-        qrcode_base64 = (
-            data.get("qrcode_base64")
-            or data.get("qrCodeBase64")
-            or data.get("base64")  # <------- AQUI TAMBÉM
-        )
+        # pega o QR da resposta REAL (no seu caso ele vem em raw["qrcode"]["base64"])
+        qr_base64 = None
+        if isinstance(raw.get("qrcode"), dict):
+            qr_base64 = raw["qrcode"].get("base64")
+        elif isinstance(raw.get("qrcode"), str):
+            qr_base64 = raw.get("qrcode")
 
         return {
             "ok": True,
             "instance_name": instance_name,
-            "qrcode": qrcode,
-            "qrcode_base64": qrcode_base64,
-            "evolution_raw": data
+            "qrcode_base64": qr_base64,
+            "evolution_raw": raw,
         }
     except Exception as e:
-        raise HTTPException(status_code=502, detail=str(e))
-
+        raise HTTPException(status_code=502, detail=f"Evolution error: {str(e)}")
 
 
 @router.get(
