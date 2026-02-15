@@ -199,3 +199,36 @@ class EvolutionService:
     @classmethod
     def send_audio_url(cls, instance_name: str, to: str, audio_url: str, ptt: bool = True):
         return cls.send_audio(instance_name, to, audio_url)
+    
+    @staticmethod
+    def get_instance_qrcode(instance_name: str):
+        """
+        Recupera o QR CODE diretamente do payload Evolution,
+        sem depender do endpoint /qrcode (que vive bugando).
+        """
+        svc = EvolutionService()
+
+        # 1) Consulta o estado real da instância
+        data = svc.connection_state(instance_name)
+
+        # Proteções contra payload instável
+        evo = data.get("evolution_raw", {})
+        qrcode = evo.get("qrcode")
+
+        if not qrcode:
+            return {
+                "ok": False,
+                "instance_name": instance_name,
+                "qrcode": None,
+                "reason": "Instância sem QR Code no momento (provavelmente state != 'qrcode')",
+                "evolution_raw": evo
+            }
+
+        # 2) QR vindo diretamente do servidor Evolution
+        return {
+            "ok": True,
+            "instance_name": instance_name,
+            "pairing_code": qrcode.get("pairingCode"),
+            "qrcode_base64": qrcode.get("base64"),
+            "raw": qrcode
+        }

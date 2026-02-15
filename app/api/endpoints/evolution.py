@@ -110,41 +110,81 @@ def evo_instance_state(instance_name: str):
 
 
 @router.get(
-    "/instances/{instance_name}/qrcode",
+    "/instances/{instance_name}/status",
     response_model=ConnectOut,
     dependencies=[Depends(verify_n8n_api_key)],
 )
-def evo_instance_qrcode(instance_name: str):
+def evo_instance_status(instance_name: str):
     """
-    Endpoint "salva-vidas": tenta pegar QRCode do estado da instância.
-    Se o Evolution não devolver QR no connect, você testa por aqui.
+    Endpoint de diagnóstico geral da instância Evolution.
+    Tenta recuperar QRCode + status + detalhes internos, independentemente
+    do formato retornado pelo Evolution.
     """
     try:
         raw = EvolutionService.connection_state(instance_name)
 
+        instance = raw.get("instance") or raw
+
+        # --- Possíveis chaves de QRCode ---
         qrcode = (
             raw.get("qrcode")
             or raw.get("qrCode")
             or raw.get("qr_code")
-            or (raw.get("instance") or {}).get("qrcode")
-            or (raw.get("instance") or {}).get("qrCode")
+            or instance.get("qrcode")
+            or instance.get("qrCode")
+            or instance.get("qr_code")
         )
+
         qrcode_base64 = (
             raw.get("qrcode_base64")
             or raw.get("qrCodeBase64")
-            or (raw.get("instance") or {}).get("qrcode_base64")
-            or (raw.get("instance") or {}).get("qrCodeBase64")
+            or instance.get("qrcode_base64")
+            or instance.get("qrCodeBase64")
+        )
+
+        # --- Status da instância ---
+        state = (
+            instance.get("state")
+            or instance.get("status")
+            or raw.get("state")
+            or raw.get("status")
+        )
+
+        # --- Outros dados úteis ---
+        retries = (
+            instance.get("retries")
+            or raw.get("retries")
+        )
+
+        fail_reason = (
+            instance.get("failReason")
+            or instance.get("failureReason")
+            or raw.get("failReason")
+            or raw.get("failureReason")
+        )
+
+        phone_connected = (
+            instance.get("phone_connected")
+            or instance.get("phoneConnected")
+            or raw.get("phone_connected")
+            or raw.get("phoneConnected")
         )
 
         return {
             "ok": True,
             "instance_name": instance_name,
+            "state": state,
+            "retries": retries,
+            "fail_reason": fail_reason,
+            "phone_connected": phone_connected,
             "qrcode": qrcode if isinstance(qrcode, str) else None,
             "qrcode_base64": qrcode_base64 if isinstance(qrcode_base64, str) else None,
             "evolution_raw": raw,
         }
+
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Evolution error: {str(e)}")
+
 
 @router.post("/instances/{instance_name}/restart", dependencies=[Depends(verify_n8n_api_key)])
 def evo_restart_instance(instance_name: str):
