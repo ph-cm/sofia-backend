@@ -19,6 +19,7 @@ def provision_chatwoot(payload: ProvisionChatwootIn, db: Session = Depends(get_d
         user_id=payload.user_id,
         account_name=payload.account_name,
         inbox_name=payload.inbox_name,
+        evolution_instance_id=payload.evolution_instance_id
     )
     return ProvisionChatwootOut(
         ok=True,
