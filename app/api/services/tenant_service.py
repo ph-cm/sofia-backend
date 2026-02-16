@@ -176,10 +176,12 @@ class TenantService:
             user = db.get(User, tenant.user_id)
             if user:
                 user.inbox_id = inbox_id
-            
+                db.add(user)
+
             db.add(tenant)
             db.commit()
             db.refresh(tenant)
+
 
             print(f"TENANT_CHATWOOT_OK: tenant_id={tenant.id} account_id={account_id} inbox_id={inbox_id}")
             return {
