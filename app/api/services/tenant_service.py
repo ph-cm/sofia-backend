@@ -6,6 +6,7 @@ from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from app.api.models.tenant import Tenant
+from app.api.models.user import User
 
 from app.db.session import SessionLocal
 from app.api.models.tenant_integration import TenantIntegration
@@ -34,11 +35,22 @@ class TenantService:
                 return None
 
             # 2️⃣ Buscar tenant real
-            tenant = db.get(Tenant, integration.user_id)
+            tenant = db.execute(
+                select(Tenant).where(Tenant.user_id == integration.user_id)
+            ).scalar_one_or_none()
+
 
             if not tenant:
-                print(f"TENANT_NOT_FOUND_FOR_USER: user_id={integration.user_id}")
-                return None
+                print(f"TENANT_AUTO_CREATE: user_id={integration.user_id}")
+
+                tenant = Tenant(
+                    user_id=integration.user_id,
+                    name=f"Tenant {integration.user_id}"
+                )
+                db.add(tenant)
+                db.commit()
+                db.refresh(tenant)
+
 
             print(f"TENANT_LOOKUP_OK: instance_name={instance_name} tenant_id={tenant.id}")
 
@@ -91,9 +103,19 @@ class TenantService:
 
         db: Session = SessionLocal()
         try:
-            tenant = db.get(Tenant, tenant_id)
+            tenant = db.execute(
+                select(Tenant).where(Tenant.user_id == tenant_id)
+            ).scalar_one_or_none()
+
             if not tenant:
-                raise ValueError("tenant_not_found")
+                tenant = Tenant(
+                    user_id=tenant_id,
+                    name=f"Tenant {tenant_id}"
+                )
+                db.add(tenant)
+                db.commit()
+                db.refresh(tenant)
+
 
             instance_name = instance_name.strip()
 
@@ -131,14 +153,30 @@ class TenantService:
     def set_chatwoot_config(tenant_id: int, account_id: int, inbox_id: int, api_token: str) -> Dict[str, Any]:
         db: Session = SessionLocal()
         try:
-            tenant = db.get(Tenant, tenant_id)
+            tenant = db.execute(
+                select(Tenant).where(Tenant.user_id == tenant_id)
+            ).scalar_one_or_none()
+
             if not tenant:
-                raise ValueError("tenant_not_found")
+                tenant = Tenant(
+                    user_id=tenant_id,
+                    name=f"Tenant {tenant_id}"
+                )
+                db.add(tenant)
+                db.commit()
+                db.refresh(tenant)
+
 
             tenant.chatwoot_account_id = account_id
             tenant.chatwoot_inbox_id = inbox_id
             tenant.chatwoot_api_token = api_token
 
+            
+            
+            user = db.get(User, tenant.user_id)
+            if user:
+                user.inbox_id = inbox_id
+            
             db.add(tenant)
             db.commit()
             db.refresh(tenant)
