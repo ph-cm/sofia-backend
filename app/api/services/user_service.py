@@ -6,6 +6,7 @@ from app.api.models.user import User
 from app.api.models.google_token import GoogleToken
 from app.core.security import get_password_hash, verify_password
 from app.schemas.user import UserUpdate
+from app.api.models.tenant import Tenant
 
 pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -13,32 +14,47 @@ class UserService:
 
     @staticmethod
     def create_user(db: Session, data):
+
+        try:
+            inbox_id = getattr(data, 'inbox_id', None)
+            if not inbox_id or int(inbox_id) <= 0:
+                inbox_id = None
+
+            # 1️⃣ Criar usuário
+            user = User(
+                email=data.email,
+                password_hash=get_password_hash(data.password),
+                inbox_id=inbox_id,
+                nome=data.nome,
+                phone_channel=data.phone_channel,
+                calendar_id=data.calendar_id,
+                timezone=data.timezone,
+                duracao_consulta=data.duracao_consulta,
+                valor_consulta=data.valor_consulta,
+                ativo=data.ativo
+            )
+
+            db.add(user)
+            db.flush()  # 🔥 gera user.id sem commit
+
+            # 2️⃣ Criar tenant automaticamente
+            tenant = Tenant(
+                name=f"Tenant {user.nome}",
+                user_id=user.id
+            )
+
+            db.add(tenant)
+
+            # 3️⃣ Commit único (transação atômica)
+            db.commit()
+
+            db.refresh(user)
+            return user
+
+        except Exception:
+            db.rollback()
+            raise
         
-        inbox_id = getattr(data, 'inbox_id', None)
-        if not inbox_id or int(inbox_id) <= 0:
-            inbox_id = None
-            
-        user = User(
-            email=data.email,
-            password_hash=get_password_hash(data.password),
-            inbox_id=inbox_id,
-            nome=data.nome,
-            phone_channel=data.phone_channel,
-            calendar_id=data.calendar_id,
-            timezone=data.timezone,
-            duracao_consulta=data.duracao_consulta,
-            valor_consulta=data.valor_consulta,
-            ativo=data.ativo
-            
-            # bio_profissional=getattr(data, 'bio_profissional', None),
-            # especialidade=getattr(data, 'especialidade', None),
-        )
-
-        db.add(user)
-        db.commit()
-        db.refresh(user)
-        return user
-
     @staticmethod
     def authenticate(db: Session, email: str, password: str):
         user = db.query(User).filter(User.email == email).first()
