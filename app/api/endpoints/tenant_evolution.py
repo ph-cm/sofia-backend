@@ -21,16 +21,17 @@ class ChatwootConfigIn(BaseModel):
 
 class TenantCreateIn(BaseModel):
     name: str
+    user_id: int
     
 @router.post("")
 def create_tenant(body: TenantCreateIn):
     db: Session = SessionLocal()
     try:
-        t = Tenant(name=body.name)
+        t = Tenant(name=body.name, user_id=body.user_id)
         db.add(t)
         db.commit()
         db.refresh(t)
-        return {"ok": True, "tenant": {"id": t.id, "name": t.name}}
+        return {"ok": True, "tenant": {"id": t.id, "name": t.name, "user_id": t.user_id}}
     finally:
         db.close()
 

@@ -15,9 +15,21 @@ def get_tenant_profile(user_id: int, db: Session = Depends(get_db)):
     tenant = db.query(Tenant).filter(Tenant.user_id == user_id).first()
 
     if not tenant:
-        raise HTTPException(status_code=404, detail="Tenant not found")
+        # cria automaticamente
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        tenant = Tenant(
+            name=user.nome,
+            user_id=user.id
+        )
+        db.add(tenant)
+        db.commit()
+        db.refresh(tenant)
 
     return tenant
+
 
 
     # Ajuste nomes conforme seu model User
