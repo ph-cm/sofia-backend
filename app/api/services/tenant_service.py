@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select
 
 from app.db.session import SessionLocal
-from app.api.models.tenant import Tenant
+from app.api.models.tenant_integration import TenantIntegration
 
 
 class TenantService:
@@ -19,25 +19,30 @@ class TenantService:
 
         db: Session = SessionLocal()
         try:
-            tenant = db.execute(
-                select(Tenant).where(Tenant.evolution_instance_name == instance_name.strip())
+            instance_name = instance_name.strip()
+
+            tenant_integration = db.execute(
+                select(TenantIntegration)
+                .where(TenantIntegration.evolution_instance_id == instance_name)
             ).scalar_one_or_none()
 
-            if not tenant:
+            if not tenant_integration:
                 print(f"TENANT_LOOKUP_NOT_FOUND: instance_name={instance_name}")
                 return None
 
-            print(f"TENANT_LOOKUP_OK: instance_name={instance_name} tenant_id={tenant.id}")
+            print(f"TENANT_LOOKUP_OK: instance_name={instance_name} user_id={tenant_integration.user_id}")
+
             return {
-                "id": tenant.id,
-                "name": tenant.name,
-                "evolution_instance_name": tenant.evolution_instance_name,
-                "chatwoot_account_id": tenant.chatwoot_account_id,
-                "chatwoot_inbox_id": tenant.chatwoot_inbox_id,
-                "chatwoot_api_token": tenant.chatwoot_api_token,
+                "user_id": tenant_integration.user_id,
+                "chatwoot_account_id": tenant_integration.chatwoot_account_id,
+                "chatwoot_inbox_id": tenant_integration.chatwoot_inbox_id,
+                "chatwoot_inbox_identifier": tenant_integration.chatwoot_inbox_identifier,
+                "evolution_instance_id": tenant_integration.evolution_instance_id,
             }
+
         finally:
             db.close()
+
 
     # ✅ NOVO: usado no fluxo de saída (Chatwoot -> Evolution)
     @staticmethod
