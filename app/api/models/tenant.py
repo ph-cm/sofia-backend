@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import Column, Integer, String, DateTime, func
+from sqlalchemy import Column, Integer, String, DateTime, func, ForeignKey  
 from app.db.base_class import Base  # ajuste: onde fica seu declarative_base
 
 
@@ -9,7 +9,7 @@ class Tenant(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
-
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True)
     # Evolution
     evolution_instance_name = Column(String, unique=True, index=True, nullable=True)
 
