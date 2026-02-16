@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import select
+from app.api.models.tenant import Tenant
 
 from app.db.session import SessionLocal
 from app.api.models.tenant_integration import TenantIntegration
@@ -12,7 +13,8 @@ from app.api.models.tenant_integration import TenantIntegration
 
 class TenantService:
     @staticmethod
-    def get_by_evolution_instance(instance_name: str) -> Optional[Dict[str, Any]]:
+    def get_by_evolution_instance(instance_name: str):
+
         if not instance_name or not instance_name.strip():
             print("TENANT_LOOKUP_IGNORED: empty instance_name")
             return None
@@ -21,23 +23,32 @@ class TenantService:
         try:
             instance_name = instance_name.strip()
 
-            tenant_integration = db.execute(
+            # 1️⃣ Buscar integração
+            integration = db.execute(
                 select(TenantIntegration)
                 .where(TenantIntegration.evolution_instance_id == instance_name)
             ).scalar_one_or_none()
 
-            if not tenant_integration:
+            if not integration:
                 print(f"TENANT_LOOKUP_NOT_FOUND: instance_name={instance_name}")
                 return None
 
-            print(f"TENANT_LOOKUP_OK: instance_name={instance_name} user_id={tenant_integration.user_id}")
+            # 2️⃣ Buscar tenant real
+            tenant = db.get(Tenant, integration.user_id)
+
+            if not tenant:
+                print(f"TENANT_NOT_FOUND_FOR_USER: user_id={integration.user_id}")
+                return None
+
+            print(f"TENANT_LOOKUP_OK: instance_name={instance_name} tenant_id={tenant.id}")
 
             return {
-                "user_id": tenant_integration.user_id,
-                "chatwoot_account_id": tenant_integration.chatwoot_account_id,
-                "chatwoot_inbox_id": tenant_integration.chatwoot_inbox_id,
-                "chatwoot_inbox_identifier": tenant_integration.chatwoot_inbox_identifier,
-                "evolution_instance_id": tenant_integration.evolution_instance_id,
+                "tenant_id": tenant.id,
+                "name": tenant.name,
+                "chatwoot_account_id": tenant.chatwoot_account_id,
+                "chatwoot_inbox_id": tenant.chatwoot_inbox_id,
+                "chatwoot_api_token": tenant.chatwoot_api_token,
+                "evolution_instance_name": tenant.evolution_instance_name,
             }
 
         finally:
