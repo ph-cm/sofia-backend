@@ -95,19 +95,37 @@ class TenantService:
             if not tenant:
                 raise ValueError("tenant_not_found")
 
-            tenant.evolution_instance_name = instance_name.strip()
-            db.add(tenant)
-            db.commit()
-            db.refresh(tenant)
+            instance_name = instance_name.strip()
 
-            print(f"TENANT_BIND_OK: tenant_id={tenant.id} instance_name={tenant.evolution_instance_name}")
+            # 🔎 Verifica se já existe integração para esse tenant
+            integration = db.execute(
+                select(TenantIntegration)
+                .where(TenantIntegration.user_id == tenant_id)
+            ).scalar_one_or_none()
+
+            if integration:
+                # Atualiza
+                integration.evolution_instance_id = instance_name
+            else:
+                # Cria nova
+                integration = TenantIntegration(
+                    user_id=tenant_id,
+                    evolution_instance_id=instance_name,
+                )
+                db.add(integration)
+
+            db.commit()
+
+            print(f"TENANT_BIND_OK: tenant_id={tenant_id} instance_name={instance_name}")
+
             return {
-                "id": tenant.id,
-                "name": tenant.name,
-                "evolution_instance_name": tenant.evolution_instance_name,
+                "tenant_id": tenant_id,
+                "evolution_instance_name": instance_name,
             }
+
         finally:
             db.close()
+
 
     @staticmethod
     def set_chatwoot_config(tenant_id: int, account_id: int, inbox_id: int, api_token: str) -> Dict[str, Any]:
