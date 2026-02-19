@@ -38,7 +38,6 @@ def get_tenant_profile(user_id: int, db: Session = Depends(get_db)):
         "evolution_instance_name": integration.evolution_instance_id,
         "chatwoot_account_id": integration.chatwoot_account_id,
         "chatwoot_inbox_id": integration.chatwoot_inbox_id,
-        "chatwoot_api_token": integration.chatwoot_api_token
     }
 
 
