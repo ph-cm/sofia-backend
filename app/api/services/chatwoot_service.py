@@ -96,51 +96,103 @@ class ChatwootService:
     
         # ---------- Inboxes ----------
 
-    # ---------- MÉTODOS DE PROVISIONAMENTO (USADOS PELO SERVICE) ----------
-
-    @classmethod
-    def create_account(cls, name: str) -> Dict[str, Any]:
-        """
-        ✅ ADICIONADO: Cria uma conta (Tenant) no Chatwoot.
-        É a função que estava faltando e causando o erro 500.
-        """
-        url = f"{cls.BASE_URL}/api/v1/accounts"
-        payload = {"name": name}
-        
-        r = requests.post(url, json=payload, headers=cls._headers(), timeout=30)
-        if r.status_code >= 300:
-            print(f"❌ Erro Chatwoot create_account: {r.status_code} {r.text}")
-            return {}
-        
-        return r.json()
     
-    def create_api_inbox(self, name: str) -> Dict[str, Any]:
+    # def create_api_inbox(self, name: str) -> Dict[str, Any]:
+    #     """
+    #     Cria um inbox do tipo API no Chatwoot.
+    #     Esse inbox será usado para receber e enviar mensagens via API/webhooks.
+    #     """
+    #     path = f"/api/v1/accounts/{self.account_id}/inboxes"
+    #     url = self._url(path)
+
+    #     payload = {
+    #         "name": name,
+    #         "channel": {
+    #             "type": "api"
+    #         }
+    #     }
+
+    #     r = requests.post(url, json=payload, headers=self._headers(), timeout=30)
+    #     self._raise(r, "Chatwoot create_api_inbox failed")
+    #     data = r.json()
+    #     self._log_http("POST", path, r, data)
+
+    #     # Normaliza retorno: pode vir {"payload": {...}} dependendo da versão
+    #     unwrapped = self._unwrap_payload(data)
+
+    #     inbox_id = self._extract_id(unwrapped)
+    #     print("CHATWOOT_INBOX_CREATED:", {"id": inbox_id, "name": name})
+
+    #     return unwrapped if isinstance(unwrapped, dict) else {"raw": unwrapped}
+    def create_api_inbox(
+        self,
+        name: str,
+        webhook_url: Optional[str] = None,
+        webhook_secret: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
-        Cria um inbox do tipo API no Chatwoot.
-        Esse inbox será usado para receber e enviar mensagens via API/webhooks.
+        Cria um Inbox do tipo API (Channel::Api) corretamente configurado.
         """
+
         path = f"/api/v1/accounts/{self.account_id}/inboxes"
         url = self._url(path)
 
+        channel_payload: Dict[str, Any] = {
+            "type": "api"
+        }
+
+        # Se quiser que Chatwoot envie outgoing para sua API
+        if webhook_url:
+            channel_payload["webhook_url"] = webhook_url
+
+        if webhook_secret:
+            channel_payload["webhook_secret"] = webhook_secret
+
         payload = {
             "name": name,
-            "channel": {
-                "type": "api"
-            }
+            "channel": channel_payload,
         }
 
         r = requests.post(url, json=payload, headers=self._headers(), timeout=30)
         self._raise(r, "Chatwoot create_api_inbox failed")
+
         data = r.json()
         self._log_http("POST", path, r, data)
 
-        # Normaliza retorno: pode vir {"payload": {...}} dependendo da versão
-        unwrapped = self._unwrap_payload(data)
+        inbox_obj = self._unwrap_payload(data)
 
-        inbox_id = self._extract_id(unwrapped)
-        print("CHATWOOT_INBOX_CREATED:", {"id": inbox_id, "name": name})
+        if not isinstance(inbox_obj, dict):
+            return {"raw": inbox_obj}
 
-        return unwrapped if isinstance(unwrapped, dict) else {"raw": unwrapped}
+        inbox_id = inbox_obj.get("id")
+
+        # Extrai identificador corretamente
+        identifier = (
+            inbox_obj.get("inbox_identifier")
+            or inbox_obj.get("identifier")
+            or (
+                inbox_obj.get("channel", {}).get("identifier")
+                if isinstance(inbox_obj.get("channel"), dict)
+                else None
+            )
+        )
+
+        print(
+            "CHATWOOT_INBOX_CREATED:",
+            {
+                "id": inbox_id,
+                "name": name,
+                "identifier": identifier,
+                "webhook_url": webhook_url,
+            },
+        )
+
+        return {
+            "id": inbox_id,
+            "identifier": identifier,
+            "raw": inbox_obj,
+        }
+
 
 
     # ---------- Contacts ----------
