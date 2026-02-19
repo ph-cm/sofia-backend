@@ -19,26 +19,30 @@ app = FastAPI(
     description="Backend para gerenciamento de instâncias e integrações.",
     version="0.1.0",
 )
-# app.add_middleware(
-#     CORSMiddleware,
-#     allow_origins=[
-#         "http://localhost:5173",
-#         "http://127.0.0.1:5173",
-#         "http://localhost:3000",
-#         "http://127.0.0.1:3000",
-#     ],
-#     allow_credentials=True,
-#     allow_methods=["*"],
-#     allow_headers=["*"],
-# )   
+    # app.add_middleware(
+    #     CORSMiddleware,
+    #     allow_origins=[
+    #         "http://localhost:5173",
+    #         "http://127.0.0.1:5173",
+    #         "http://localhost:3000",
+    #         "http://127.0.0.1:3000",
+    #     ],
+    #     allow_credentials=True,
+    #     allow_methods=["*"],
+    #     allow_headers=["*"],
+    # )   
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://yw00004g8o0cw48s8w8o0w4g.31.97.246.165.sslip.io",
+    ],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 app.include_router(google.router)
 app.include_router(auth.router)
