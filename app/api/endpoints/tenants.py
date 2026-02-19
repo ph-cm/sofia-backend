@@ -5,30 +5,42 @@ from app.db.session import get_db
 from app.api.models.user import User
 from app.schemas.tenant import TenantProfileOut
 from app.api.models.tenant import Tenant
+from app.api.models.tenant_integration import TenantIntegration
 
 router = APIRouter(prefix="/tenants", tags=["Tenants"])
 
 
-@router.get("/profile/{user_id}", response_model=TenantProfileOut)
+@router.get("/tenants/profile/{user_id}")
 def get_tenant_profile(user_id: int, db: Session = Depends(get_db)):
 
-    tenant = db.query(Tenant).filter(Tenant.user_id == user_id).first()
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
 
-    if not tenant:
-        # cria automaticamente
-        user = db.query(User).filter(User.id == user_id).first()
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
+    integration = db.query(TenantIntegration)\
+        .filter(TenantIntegration.user_id == user_id)\
+        .first()
 
-        tenant = Tenant(
-            name=user.nome,
-            user_id=user.id
-        )
-        db.add(tenant)
-        db.commit()
-        db.refresh(tenant)
+    if not integration:
+        raise HTTPException(status_code=404, detail="Integration not found")
 
-    return tenant
+    return {
+        # ===== USERS (DADOS REAIS DO MÉDICO) =====
+        "id": user.id,
+        "nome": user.nome,
+        "timezone": user.timezone,
+        "duracao_consulta": user.duracao_consulta,
+        "valor_consulta": user.valor_consulta,
+        "calendar_id": user.calendar_id,
+        "phone_channel": user.phone_channel,
+
+        # ===== TENANT_INTEGRATIONS (BINDING TÉCNICO) =====
+        "evolution_instance_name": integration.evolution_instance_id,
+        "chatwoot_account_id": integration.chatwoot_account_id,
+        "chatwoot_inbox_id": integration.chatwoot_inbox_id,
+        "chatwoot_api_token": integration.chatwoot_api_token
+    }
+
 
 
 
