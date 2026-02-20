@@ -38,8 +38,8 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://yw00004g8o0cw48s8w8o0w4g.31.97.246.165.sslip.io",
-        "https://sofiatech.ia.br"
-        "https://www.sofiatech.ia.br"
+        "https://sofiatech.ia.br",
+        "https://www.sofiatech.ia.br",
     ],
     allow_credentials=True,
     allow_methods=["*"],
