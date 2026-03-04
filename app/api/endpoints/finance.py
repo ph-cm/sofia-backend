@@ -23,18 +23,25 @@ from app.api.services.finance_service import FinanceService
 router = APIRouter(prefix="/finance", tags=["finance"])
 
 
-@router.get("/summary", response_model=FinanceSummaryOut)
-def finance_summary(
-    tenant_id: int = Query(...),
-    date_from: date = Query(..., alias="from"),
-    date_to: date = Query(..., alias="to"),
-    db: Session = Depends(get_db),
+from datetime import date
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+# (Mantenha seus outros imports normais)
+
+@router.get("/summary")
+def get_finance_summary(
+    tenant_id: int,
+    date_from: date,  # 👈 MUDOU AQUI! (antes era from_date ou from)
+    date_to: date,    # 👈 MUDOU AQUI! (antes era to_date ou to)
+    db: Session = Depends(get_db)
 ):
-    try:
-        data = FinanceService.get_summary(db, tenant_id=tenant_id, date_from=date_from, date_to=date_to)
-        return data
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    # Passa o date_from e date_to pro seu service
+    return FinanceService.get_summary(
+        db=db, 
+        tenant_id=tenant_id, 
+        date_from=date_from, 
+        date_to=date_to
+    )
 
 
 @router.get("/transactions", response_model=dict)
