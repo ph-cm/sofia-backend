@@ -9,22 +9,22 @@ Status = Literal["pending", "paid", "cancelled"]
 
 class FinanceCategoryOut(BaseModel):
     id: int
-    tenant_id: int
+    # 🔥 tenant_id removido!
     name: str
     is_active: bool
 
     class Config:
-        orm_mode = True
+        from_attributes = True # 🔥 Atualizado para Pydantic V2 (tira o Warning do terminal)
 
 
 class FinancePaymentMethodOut(BaseModel):
     id: int
-    tenant_id: int
+    # 🔥 tenant_id removido!
     name: str
     is_active: bool
 
     class Config:
-        orm_mode = True
+        from_attributes = True # 🔥 Atualizado para Pydantic V2
 
 
 class FinanceTransactionCreate(BaseModel):
