@@ -40,6 +40,16 @@ def get_tenant_profile(user_id: int, db: Session = Depends(get_db)):
         "chatwoot_inbox_id": integration.chatwoot_inbox_id,
     }
 
+@router.get("/by-user/{user_id}/tenant-id")
+def get_tenant_id_only(user_id: int, db: Session = Depends(get_db)):
+    from app.api.models.tenant import Tenant
+    
+    tenant = db.query(Tenant).filter(Tenant.user_id == user_id).first()
+    
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant não encontrado")
+        
+    return {"tenant_id": tenant.id}
 
 
 
