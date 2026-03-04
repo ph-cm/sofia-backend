@@ -147,6 +147,7 @@ class FinanceService:
         net_sum = int(income_sum) - int(expenses_sum)
 
         # by_category (somando só income não cancelado por padrão)
+        # ✅ REMOVIDO: FinanceCategory.tenant_id == tenant_id
         by_category_rows = (
             db.query(
                 FinanceCategory.id,
@@ -155,7 +156,6 @@ class FinanceService:
             )
             .join(FinanceTransaction, FinanceTransaction.category_id == FinanceCategory.id)
             .filter(
-                FinanceCategory.tenant_id == tenant_id,
                 FinanceTransaction.tenant_id == tenant_id,
                 func.date(FinanceTransaction.created_at) >= date_from,
                 func.date(FinanceTransaction.created_at) <= date_to,
@@ -167,6 +167,7 @@ class FinanceService:
             .all()
         )
 
+        # ✅ REMOVIDO: FinancePaymentMethod.tenant_id == tenant_id
         by_payment_rows = (
             db.query(
                 FinancePaymentMethod.id,
@@ -175,7 +176,6 @@ class FinanceService:
             )
             .join(FinanceTransaction, FinanceTransaction.payment_method_id == FinancePaymentMethod.id)
             .filter(
-                FinancePaymentMethod.tenant_id == tenant_id,
                 FinanceTransaction.tenant_id == tenant_id,
                 func.date(FinanceTransaction.created_at) >= date_from,
                 func.date(FinanceTransaction.created_at) <= date_to,
@@ -228,18 +228,18 @@ class FinanceService:
     # ------------------------
     @staticmethod
     def list_categories(db: Session, *, tenant_id: int) -> List[FinanceCategory]:
+        # ✅ REMOVIDO: .filter(FinanceCategory.tenant_id == tenant_id)
         return (
             db.query(FinanceCategory)
-            .filter(FinanceCategory.tenant_id == tenant_id)
             .order_by(FinanceCategory.name.asc())
             .all()
         )
 
     @staticmethod
     def list_payment_methods(db: Session, *, tenant_id: int) -> List[FinancePaymentMethod]:
+        # ✅ REMOVIDO: .filter(FinancePaymentMethod.tenant_id == tenant_id)
         return (
             db.query(FinancePaymentMethod)
-            .filter(FinancePaymentMethod.tenant_id == tenant_id)
             .order_by(FinancePaymentMethod.name.asc())
             .all()
         )
