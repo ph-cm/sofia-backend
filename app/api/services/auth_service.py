@@ -52,14 +52,22 @@ class AuthService:
         if not user:
             raise HTTPException(status_code=400, detail="Email ou senha incorretos")
 
-        # Cria o token JWT
-        token = criar_token({"sub": str(user.id)})
+        # 1. Injetamos o tenant_id dentro do Token JWT (Segurança Backend)
+        # O token agora carrega quem é o usuário e a qual clínica ele pertence
+        token = criar_token({
+            "sub": str(user.id), 
+            "tenant_id": user.tenant_id 
+        })
 
+        # 2. Retornamos o tenant_id no objeto user para o Frontend (React) usar na UI
+        # Aproveitei para adicionar o 'nome' que a sua interface (api.tsx) também espera!
         return {
             "access_token": token,
             "token_type": "bearer",
             "user": {
                 "id": user.id,
-                "email": user.email
+                "email": user.email,
+                "nome": user.nome, # Retornando seu nome
+                "tenant_id": user.tenant_id # <-- Frontend agora sabe o tenant!
             }
         }
