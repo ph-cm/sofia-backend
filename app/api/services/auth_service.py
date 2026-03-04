@@ -3,6 +3,7 @@ from passlib.context import CryptContext
 from fastapi import HTTPException
 from app.api.models.user import User
 from app.core.security import criar_token
+from app.api.models.tenant import Tenant # Ajuste o caminho conforme o seu projeto
 
 pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -52,22 +53,36 @@ class AuthService:
         if not user:
             raise HTTPException(status_code=400, detail="Email ou senha incorretos")
 
-        # 1. Injetamos o tenant_id dentro do Token JWT (Segurança Backend)
-        # O token agora carrega quem é o usuário e a qual clínica ele pertence
+        # 1. Buscar o tenant associado a este usuário.
+        # Supondo que a tabela tenants tenha uma coluna 'user_id' que liga o dono ao tenant:
+        tenant = db.query(Tenant).filter(Tenant.user_id == user.id).first()
+        
+        # Se você usar relationships do SQLAlchemy (ex: user.tenant), poderia ser apenas:
+        # tenant_id = user.tenant.id if user.tenant else None
+        
+        tenant_id = tenant.id if tenant else None
+
+        # 2. Injetar o tenant_id no Token JWT
         token = criar_token({
-            "sub": str(user.id), 
-            "tenant_id": user.tenant_id 
+            "sub": str(user.id),
+            "tenant_id": tenant_id
         })
 
-        # 2. Retornamos o tenant_id no objeto user para o Frontend (React) usar na UI
-        # Aproveitei para adicionar o 'nome' que a sua interface (api.tsx) também espera!
+        # 3. Retornar todos os dados que o seu frontend já espera, AGORA com o tenant_id
         return {
             "access_token": token,
             "token_type": "bearer",
             "user": {
                 "id": user.id,
                 "email": user.email,
-                "nome": user.nome, # Retornando seu nome
-                "tenant_id": user.tenant_id # <-- Frontend agora sabe o tenant!
+                "nome": user.nome,
+                "phone_channel": getattr(user, "phone_channel", None),
+                "calendar_id": getattr(user, "calendar_id", None),
+                "timezone": getattr(user, "timezone", None),
+                "duracao_consulta": getattr(user, "duracao_consulta", None),
+                "valor_consulta": getattr(user, "valor_consulta", None),
+                "ativo": getattr(user, "ativo", True),
+                "inbox_id": getattr(user, "inbox_id", None),
+                "tenant_id": tenant_id  # <-- Agora ele vai aparecer no LocalStorage!
             }
         }
