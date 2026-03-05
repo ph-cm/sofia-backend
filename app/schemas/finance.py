@@ -66,6 +66,15 @@ class FinanceTransactionUpdate(BaseModel):
     appointment_id: Optional[int] = None
 
 
+from datetime import date, datetime
+from typing import Optional, List, Literal, Dict
+from pydantic import BaseModel, Field
+from pydantic.config import ConfigDict
+
+Kind = Literal["income", "expense"]
+Status = Literal["pending", "paid", "cancelled"]
+
+
 class FinanceTransactionOut(BaseModel):
     id: int
     tenant_id: int
@@ -90,8 +99,16 @@ class FinanceTransactionOut(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)  # ✅ Pydantic v2
+
+
+class FinanceTransactionsListOut(BaseModel):
+    items: List[FinanceTransactionOut]
+    total: int
+    page: int
+    limit: int
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class FinanceSummaryTotals(BaseModel):

@@ -17,6 +17,7 @@ from app.schemas.finance import (
     FinanceTransactionUpdate,
     FinanceCategoryOut,
     FinancePaymentMethodOut,
+    FinanceTransactionsListOut
 )
 from app.api.services.finance_service import FinanceService
 
@@ -43,7 +44,7 @@ def get_finance_summary(
     )
 
 
-@router.get("/transactions", response_model=dict)
+@router.get("/transactions", response_model=FinanceTransactionsListOut)
 def list_transactions(
     tenant_id: int = Query(...),
     date_from: Optional[date] = Query(None, alias="from"),
@@ -68,12 +69,16 @@ def list_transactions(
         page=page,
         limit=limit,
     )
-    return {
-        "items": items,
-        "total": total,
-        "page": page,
-        "limit": limit,
-    }
+
+    # ✅ garante serialização mesmo se "items" vierem como ORM
+    items_out = [FinanceTransactionOut.model_validate(tx) for tx in items]
+
+    return FinanceTransactionsListOut(
+        items=items_out,
+        total=total,
+        page=page,
+        limit=limit,
+    )
 
 
 @router.post("/transactions", response_model=FinanceTransactionOut)
