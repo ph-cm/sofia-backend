@@ -21,4 +21,4 @@ def analytics_summary(
         "from": from_,
         "to": to,
         **data
-    }
+    }   
