@@ -27,3 +27,7 @@ class Appointment(Base):
 
     created_at = Column(DateTime)
     updated_at = Column(DateTime)
+    from sqlalchemy import Column, DateTime, func
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
