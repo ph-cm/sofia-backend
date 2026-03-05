@@ -70,13 +70,54 @@ class GoogleTokenService:
         db.refresh(token)
         return token
 
+    # @staticmethod
+    # def refresh_access_token(db: Session, token: GoogleToken) -> GoogleToken:
+    #     """
+    #     Faz refresh usando refresh_token salvo no banco e atualiza access + expiry.
+    #     """
+    #     if not token.google_refresh_token:
+    #         raise GoogleTokenRefreshFailed("Refresh token não existe para este usuário.")
+
+    #     response = requests.post(
+    #         "https://oauth2.googleapis.com/token",
+    #         data={
+    #             "client_id": settings.GOOGLE_CLIENT_ID,
+    #             "client_secret": settings.GOOGLE_CLIENT_SECRET,
+    #             "refresh_token": token.google_refresh_token,
+    #             "grant_type": "refresh_token",
+    #         },
+    #         timeout=30,
+    #     )
+
+    #     if response.status_code != 200:
+    #         raise GoogleTokenRefreshFailed(
+    #             f"Erro ao renovar token Google: {response.text}"
+    #         )
+
+    #     data = response.json()
+
+    #     token.google_access_token = data["access_token"]
+
+    #     # garante expiry sempre preenchido e UTC-aware
+    #     expires_in = int(data.get("expires_in", 3600))
+    #     token.google_token_expiry = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+
+    #     db.commit()
+    #     db.refresh(token)
+    #     return token
+    
     @staticmethod
     def refresh_access_token(db: Session, token: GoogleToken) -> GoogleToken:
         """
         Faz refresh usando refresh_token salvo no banco e atualiza access + expiry.
+
+        Importante:
+        - Se o Google devolver invalid_grant, o refresh_token foi revogado/expirou.
+          NÃO existe refresh automático nesse caso: precisa reconectar OAuth.
+          Aqui a gente remove o token do banco pra "desconectar" e evitar loop.
         """
         if not token.google_refresh_token:
-            raise GoogleTokenRefreshFailed("Refresh token não existe para este usuário.")
+            raise GoogleTokenRefreshFailed("google_reauth_required: Refresh token não existe para este usuário.")
 
         response = requests.post(
             "https://oauth2.googleapis.com/token",
@@ -90,13 +131,35 @@ class GoogleTokenService:
         )
 
         if response.status_code != 200:
-            raise GoogleTokenRefreshFailed(
-                f"Erro ao renovar token Google: {response.text}"
-            )
+            # tenta parsear o erro do Google
+            try:
+                payload = response.json()
+            except Exception:
+                payload = None
+
+            # ✅ caso clássico: token revogado/expirado
+            if isinstance(payload, dict) and payload.get("error") == "invalid_grant":
+                # desconecta: remove registro (mínimo e seguro)
+                try:
+                    db.delete(token)
+                    db.commit()
+                except Exception:
+                    db.rollback()
+
+                raise GoogleTokenRefreshFailed(
+                    "google_reauth_required: Token do Google expirou ou foi revogado. Reconecte sua conta."
+                )
+
+            # outros erros
+            raise GoogleTokenRefreshFailed(f"Erro ao renovar token Google: {response.text}")
 
         data = response.json()
 
-        token.google_access_token = data["access_token"]
+        access = data.get("access_token")
+        if not access:
+            raise GoogleTokenRefreshFailed(f"Erro ao renovar token Google: resposta sem access_token ({data})")
+
+        token.google_access_token = access
 
         # garante expiry sempre preenchido e UTC-aware
         expires_in = int(data.get("expires_in", 3600))
