@@ -8,7 +8,7 @@ from app.api.services.analytics_service import AnalyticsService
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
-@router.get("/analytics/summary")
+@router.get("/summary")
 def analytics_summary(
     tenant_id: int,
     from_: date = Query(..., alias="from"),
