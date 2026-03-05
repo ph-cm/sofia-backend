@@ -4,20 +4,26 @@ from fastapi import HTTPException
 
 from app.api.models.appointment import Appointment
 from app.api.models.tenant import Tenant
-
+from app.api.services.appointment_mirror_sync_service import AppointmentMirrorSyncService  
+from datetime import datetime, time
 
 class AnalyticsService:
-
+    
     @staticmethod
-    def summary(db: Session, tenant_id: int, date_from: date, date_to: date):
+    def summary(db, tenant_id: int, date_from, date_to, user_id: int | None = None):
+        start_dt = datetime.combine(date_from, time.min)
+        end_dt = datetime.combine(date_to, time.max)
 
-        start_dt = datetime.combine(date_from, datetime.min.time())
-        end_dt = datetime.combine(date_to, datetime.max.time())
-
-        tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
-
-        if not tenant:
-            raise HTTPException(status_code=404, detail="Tenant não encontrado")
+        # ✅ se tiver user_id no request, sincroniza; se não, você decide regra
+        if user_id:
+            AppointmentMirrorSyncService.sync_range_from_mirror(
+                db=db,
+                tenant_id=tenant_id,
+                user_id=user_id,
+                calendar_id="primary",
+                time_min=start_dt,
+                time_max=end_dt,
+            )
 
         # 🔹 agora filtra diretamente pelo tenant_id
         rows = (
