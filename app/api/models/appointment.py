@@ -1,19 +1,18 @@
 from sqlalchemy import Column, Integer, DateTime, String, ForeignKey, Boolean
 from app.db.base_class import Base
 
+
 class Appointment(Base):
     __tablename__ = "appointments"
 
     id = Column(Integer, primary_key=True)
-    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
+    tenant_id = Column(Integer, index=True, nullable=False)
+    user_id = Column(Integer, index=True, nullable=False)
 
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
-    start_at = Column(DateTime, nullable=False, index=True)
-    end_at = Column(DateTime, nullable=True)
+    starts_at = Column(DateTime, index=True, nullable=False)  # era start_at
+    ends_at = Column(DateTime, nullable=True)                 # era end_at
 
-    status = Column(String, nullable=False, default="scheduled")
+    status = Column(String, nullable=True)
     patient_name = Column(String, nullable=True)
-
-    # opcionais p/ analytics
     amount_cents = Column(Integer, nullable=True)
-    paid = Column(Boolean, nullable=True)
+    paid = Column(Boolean, default=False)
