@@ -5,7 +5,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from app.api.models.appointment import Appointment
-from app.api.services.calendar_mirror import list_events_range
+from app.api.services.google_calendar_mirror import list_events_range
 
 
 def _parse_iso_to_naive(s: str | None) -> datetime | None:

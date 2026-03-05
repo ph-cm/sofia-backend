@@ -29,6 +29,7 @@ class AnalyticsService:
         rows = (
             db.query(Appointment)
             .filter(Appointment.tenant_id == tenant_id)
+            .filter(Appointment.start_datetime != None)
             .filter(Appointment.start_datetime >= start_dt)
             .filter(Appointment.start_datetime <= end_dt)
             .all()
