@@ -13,7 +13,13 @@ def analytics_summary(
     tenant_id: int,
     from_: date = Query(..., alias="from"),
     to: date = Query(...),
-    user_id: int = Query(...),  # obrigatorio
+    user_id: int | None = None,
     db: Session = Depends(get_db),
 ):
-    return AnalyticsService.summary(db=db, tenant_id=tenant_id, date_from=from_, date_to=to, user_id=user_id)
+    return AnalyticsService.summary(
+        db=db,
+        tenant_id=tenant_id,
+        date_from=from_,
+        date_to=to,
+        user_id=user_id
+    )
