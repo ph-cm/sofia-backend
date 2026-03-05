@@ -1,24 +1,21 @@
-from fastapi import APIRouter, Depends
+from datetime import date
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from app.db.session import get_db
-from app.api.services.analytics_service import get_analytics_summary
+from app.api.services.analytics_service import AnalyticsService
 
-router = APIRouter(prefix="/analytics", tags=["Analytics"])
-
+router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 @router.get("/summary")
 def analytics_summary(
-    tenant_id: int,
-    from_: str,
-    to: str,
-    db: Session = Depends(get_db)
+    tenant_id: int = Query(...),
+    date_from: date = Query(..., alias="from"),
+    date_to: date = Query(..., alias="to"),
+    db: Session = Depends(get_db),
 ):
-
-    data = get_analytics_summary(db, tenant_id, from_, to)
-
-    return {
-        "tenant_id": tenant_id,
-        "from": from_,
-        "to": to,
-        **data
-    }   
+    return AnalyticsService.summary(
+        db=db,
+        tenant_id=tenant_id,
+        date_from=date_from,
+        date_to=date_to,
+    )

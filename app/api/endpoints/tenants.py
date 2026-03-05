@@ -69,3 +69,15 @@ def get_tenant_id_only(user_id: int, db: Session = Depends(get_db)):
     #         "antecedencia_min_horas": 2,
     #     },
     # )
+@router.get("/profile/{user_id}")
+def tenant_profile(user_id: int, db: Session = Depends(get_db)):
+    tenant = db.query(Tenant).filter(Tenant.user_id == user_id).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant não encontrado")
+
+    # devolve o que seu front precisa (ajusta campos conforme seu model)
+    return {
+        "tenant_id": tenant.id,
+        "name": getattr(tenant, "name", None),
+        "user_id": tenant.user_id,
+    }
