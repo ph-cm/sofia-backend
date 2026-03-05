@@ -23,8 +23,8 @@ class AnalyticsService:
         rows = (
             db.query(Appointment)
             .filter(Appointment.tenant_id == tenant_id)
-            .filter(Appointment.starts_at >= start_dt)
-            .filter(Appointment.starts_at <= end_dt)
+            .filter(Appointment.start_datetime >= start_dt)
+            .filter(Appointment.start_datetime <= end_dt)
             .all()
         )
 
@@ -51,21 +51,17 @@ class AnalyticsService:
 
         # ---------------- RECENTES ----------------
 
-        recent_rows = sorted(rows, key=lambda x: x.start_at, reverse=True)[:10]
+        recent_rows = sorted(rows, key=lambda x: x.start_datetime, reverse=True)[:10]
 
         recent = []
 
         for a in recent_rows:
-            recent.append(
-                {
-                    "id": a.id,
-                    "patientName": getattr(a, "patient_name", None),
-                    "startAt": a.start_at.isoformat(),
-                    "status": a.status,
-                    "amountCents": getattr(a, "amount_cents", None),
-                    "paid": getattr(a, "paid", None),
-                }
-            )
+            recent.append({
+                "id": a.id,
+                "patientName": a.summary,
+                "startAt": a.start_datetime.isoformat(),
+                "status": a.status,
+            })
 
         # ---------------- TIMESERIES ----------------
 
@@ -88,7 +84,7 @@ class AnalyticsService:
 
         for a in rows:
 
-            day = a.start_at.date().isoformat()
+            day = a.start_datetime.date().isoformat()
 
             if day not in day_map:
                 continue
