@@ -91,7 +91,7 @@ class FinanceTransactionOut(BaseModel):
     updated_at: datetime
 
     class Config:
-        from_attributes = True  # 🔥 TROQUE ORM_MODE POR ISSO AQUI
+        orm_mode = True
 
 
 class FinanceSummaryTotals(BaseModel):

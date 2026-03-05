@@ -31,11 +31,10 @@ from sqlalchemy.orm import Session
 @router.get("/summary")
 def get_finance_summary(
     tenant_id: int,
-    date_from: date,  # 👈 MUDOU AQUI! (antes era from_date ou from)
-    date_to: date,    # 👈 MUDOU AQUI! (antes era to_date ou to)
+    date_from: date = Query(..., alias="from"),  # 🔥 Agora ele aceita 'from' da URL!
+    date_to: date = Query(..., alias="to"),      # 🔥 Agora ele aceita 'to' da URL!
     db: Session = Depends(get_db)
 ):
-    # Passa o date_from e date_to pro seu service
     return FinanceService.get_summary(
         db=db, 
         tenant_id=tenant_id, 
@@ -44,8 +43,7 @@ def get_finance_summary(
     )
 
 
-# 👇 Atualize o response_model aqui
-@router.get("/transactions", response_model=list[FinanceTransactionOut])
+@router.get("/transactions", response_model=dict)
 def list_transactions(
     tenant_id: int = Query(...),
     date_from: Optional[date] = Query(None, alias="from"),
@@ -70,8 +68,12 @@ def list_transactions(
         page=page,
         limit=limit,
     )
-    # 🔥 Retorne apenas 'items'. O Pydantic vai converter os objetos em JSON perfeitamente.
-    return items
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "limit": limit,
+    }
 
 
 @router.post("/transactions", response_model=FinanceTransactionOut)
