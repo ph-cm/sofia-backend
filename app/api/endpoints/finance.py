@@ -44,7 +44,8 @@ def get_finance_summary(
     )
 
 
-@router.get("/transactions", response_model=dict)
+# 👇 Atualize o response_model aqui
+@router.get("/transactions", response_model=list[FinanceTransactionOut])
 def list_transactions(
     tenant_id: int = Query(...),
     date_from: Optional[date] = Query(None, alias="from"),
@@ -69,12 +70,8 @@ def list_transactions(
         page=page,
         limit=limit,
     )
-    return {
-        "items": items,
-        "total": total,
-        "page": page,
-        "limit": limit,
-    }
+    # 🔥 Retorne apenas 'items'. O Pydantic vai converter os objetos em JSON perfeitamente.
+    return items
 
 
 @router.post("/transactions", response_model=FinanceTransactionOut)
