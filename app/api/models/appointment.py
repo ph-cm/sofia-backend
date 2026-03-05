@@ -1,18 +1,29 @@
-from sqlalchemy import Column, Integer, DateTime, String, ForeignKey, Boolean
-from app.db.base_class import Base
-
+from sqlalchemy import Column, Integer, String, DateTime
+from app.db import Base
 
 class Appointment(Base):
     __tablename__ = "appointments"
 
     id = Column(Integer, primary_key=True)
-    tenant_id = Column(Integer, index=True, nullable=False)
-    user_id = Column(Integer, index=True, nullable=False)
 
-    starts_at = Column(DateTime, index=True, nullable=False)  # era start_at
-    ends_at = Column(DateTime, nullable=True)                 # era end_at
+    tenant_id = Column(Integer, index=True)
+    user_id = Column(Integer)
 
-    status = Column(String, nullable=True)
-    patient_name = Column(String, nullable=True)
-    amount_cents = Column(Integer, nullable=True)
-    paid = Column(Boolean, default=False)
+    conversation_id = Column(Integer)
+    contact_id = Column(Integer)
+
+    telefone = Column(String)
+
+    calendar_id = Column(String)
+    google_event_id = Column(String)
+
+    start_datetime = Column(DateTime)   # ← ESSA LINHA É A QUE FALTA
+    end_datetime = Column(DateTime)     # ← ESSA TAMBÉM
+
+    summary = Column(String)
+    description = Column(String)
+
+    status = Column(String)
+
+    created_at = Column(DateTime)
+    updated_at = Column(DateTime)
