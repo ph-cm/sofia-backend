@@ -8,11 +8,12 @@ from app.api.services.analytics_service import AnalyticsService
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
-@router.get("/summary")
+@router.get("/analytics/summary")
 def analytics_summary(
-    tenant_id: int = Query(...),
-    date_from: date = Query(..., alias="from"),
-    date_to: date = Query(..., alias="to"),
+    tenant_id: int,
+    from_: date = Query(..., alias="from"),
+    to: date = Query(...),
+    user_id: int = Query(...),  # obrigatorio
     db: Session = Depends(get_db),
 ):
-    return AnalyticsService.summary(db=db, tenant_id=tenant_id, date_from=date_from, date_to=date_to)
+    return AnalyticsService.summary(db=db, tenant_id=tenant_id, date_from=from_, date_to=to, user_id=user_id)
