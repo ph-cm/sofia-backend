@@ -4,13 +4,16 @@ from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 
 from datetime import datetime, timezone
+from urllib.parse import urlencode
+import requests
+
 
 class GoogleAuthService:
     def __init__(self):
         self.client_config = {
             "web": {
                 "client_id": settings.GOOGLE_CLIENT_ID,
-                "project_id": "saas-secretaria",  # opcional
+                "project_id": "saas-secretaria",
                 "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                 "token_uri": "https://oauth2.googleapis.com/token",
                 "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
@@ -21,6 +24,7 @@ class GoogleAuthService:
 
         self.scopes = settings.GOOGLE_SCOPES.split(",")
 
+    # ===== LEGADO / COMPARTILHADO: NÃO MEXER =====
     def create_flow(self):
         flow = Flow.from_client_config(
             client_config=self.client_config,
@@ -39,7 +43,6 @@ class GoogleAuthService:
         )
 
         return auth_url
-
 
     def exchange_code(self, code: str):
         flow = self.create_flow()
@@ -80,4 +83,46 @@ class GoogleAuthService:
         return {
             "access": creds.token,
             "expiry": creds.expiry
+        }
+
+    # ===== NOVO / ISOLADO PARA AGENDA =====
+    def auth_url_agenda(self, user_id: int):
+        params = {
+            "client_id": settings.GOOGLE_CLIENT_ID,
+            "redirect_uri": settings.GOOGLE_REDIRECT_URI_AGENDA,
+            "response_type": "code",
+            "scope": " ".join(self.scopes),
+            "access_type": "offline",
+            "prompt": "consent",
+            "include_granted_scopes": "true",
+            "state": str(user_id),
+        }
+        return f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
+
+    def exchange_code_agenda(self, code: str):
+        response = requests.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "code": code,
+                "client_id": settings.GOOGLE_CLIENT_ID,
+                "client_secret": settings.GOOGLE_CLIENT_SECRET,
+                "redirect_uri": settings.GOOGLE_REDIRECT_URI_AGENDA,
+                "grant_type": "authorization_code",
+            },
+            timeout=30,
+        )
+
+        if response.status_code != 200:
+            raise Exception(f"Falha ao trocar code por token (agenda): {response.text}")
+
+        data = response.json()
+
+        expires_in = int(data.get("expires_in", 3600))
+
+        return {
+            "access": data["access_token"],
+            "refresh": data.get("refresh_token"),
+            "expires_in": expires_in,
+            "scope": data.get("scope"),
+            "token_type": data.get("token_type"),
         }

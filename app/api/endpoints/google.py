@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from urllib.parse import urlencode
 from starlette.responses import RedirectResponse
@@ -18,7 +18,7 @@ from datetime import timezone
 router = APIRouter(prefix="/google", tags=["Google"])
 google_service = GoogleAuthService()
 
-
+# ===== LEGADO / COMPARTILHADO: NÃO MEXER =====
 @router.get("/login")
 def google_login(user_id: int):
     return {"auth_url": google_service.auth_url(user_id)}
@@ -34,23 +34,48 @@ def google_callback(code: str, state: str, db: Session = Depends(get_db)):
         db=db,
         user_id=user_id,
         access_token=tokens["access"],
-        refresh_token=tokens.get("refresh"),  # pode vir None
+        refresh_token=tokens.get("refresh"),
         expires_in=tokens.get("expires_in"),
         scope=tokens.get("scope"),
     )
 
-    # return {"status": "connected", "user_id": user_id}
-     # ✅ redireciona pro frontend após conectar
     qs = urlencode({"user_id": user_id, "connected": "1"})
     frontend_url = f"{settings.FRONTEND_BASE_URL}/oauth/google/callback?{qs}"
     return RedirectResponse(url=frontend_url, status_code=302)
 
 
+# ===== NOVO / ISOLADO PARA AGENDA =====
+@router.get("/login-agenda")
+def google_login_agenda(user_id: int):
+    return {"auth_url": google_service.auth_url_agenda(user_id)}
+
+
+@router.get("/callback-agenda")
+def google_callback_agenda(code: str, state: str, db: Session = Depends(get_db)):
+    try:
+        user_id = int(state)
+
+        tokens = google_service.exchange_code_agenda(code)
+
+        GoogleTokenService.save_tokens(
+            db=db,
+            user_id=user_id,
+            access_token=tokens["access"],
+            refresh_token=tokens.get("refresh"),
+            expires_in=tokens.get("expires_in"),
+            scope=tokens.get("scope"),
+        )
+
+        qs = urlencode({"user_id": user_id, "connected": "1"})
+        frontend_url = f"{settings.FRONTEND_BASE_URL}/oauth/google/callback?{qs}"
+        return RedirectResponse(url=frontend_url, status_code=302)
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Falha no callback Google Agenda: {str(e)}")
+
+
 @router.get("/refresh")
 def refresh_google_token(user_id: int = Query(...), db: Session = Depends(get_db)):
-    """
-    Força refresh do access token e salva no banco com expiry UTC-aware.
-    """
     token_row = GoogleTokenService.get_by_user(db, user_id)
     if not token_row:
         raise HTTPException(status_code=404, detail="Google not connected")
@@ -58,7 +83,6 @@ def refresh_google_token(user_id: int = Query(...), db: Session = Depends(get_db
     try:
         token_row = GoogleTokenService.refresh_access_token(db, token_row)
 
-        # garantia extra (mas seu service já define expiry)
         if token_row.google_token_expiry and token_row.google_token_expiry.tzinfo is None:
             token_row.google_token_expiry = token_row.google_token_expiry.replace(tzinfo=timezone.utc)
             db.commit()
@@ -79,9 +103,6 @@ def refresh_google_token(user_id: int = Query(...), db: Session = Depends(get_db
 
 @router.get("/token")
 def get_access_token(user=Depends(get_current_user), db: Session = Depends(get_db)):
-    """
-    Retorna um access_token válido para o usuário autenticado.
-    """
     try:
         token = GoogleTokenService.get_valid_access_token(db, user["id"])
         return {"access_token": token}
@@ -99,9 +120,6 @@ def get_access_token_for_n8n(
     db: Session = Depends(get_db),
     _: None = Depends(verify_n8n_api_key),
 ):
-    """
-    Endpoint para o n8n pegar um access_token válido via x-api-key.
-    """
     try:
         token = GoogleTokenService.get_valid_access_token(db, user_id)
         return {"access_token": token}
@@ -131,7 +149,6 @@ def google_status(user_id: int = Query(...), db: Session = Depends(get_db)):
     if expiry and expiry.tzinfo is None:
         expiry = expiry.replace(tzinfo=timezone.utc)
 
-    # “connected” = tem token. Se quiser, você pode incluir expiração
     return {
         "connected": True,
         "expiry": expiry.isoformat() if expiry else None,
