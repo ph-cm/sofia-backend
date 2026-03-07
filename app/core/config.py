@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     EVOLUTION_API_KEY: str
     EVOLUTION_WEBHOOK_SECRET: str
     CHATWOOT_ACCOUNT_ID: str
+    GOOGLE_REDIRECT_URI_AGENDA: str
     # ----------------------------------------------------
     # 2. CONFIGURAÇÕES DO BANCO DE DADOS
     # ----------------------------------------------------

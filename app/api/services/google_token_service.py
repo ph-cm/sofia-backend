@@ -33,6 +33,14 @@ class GoogleTokenService:
         expires_in: int | None = None,
         scope: str | None = None,
     ) -> GoogleToken:
+        """
+        Salva tokens do OAuth.
+        IMPORTANTE:
+        - Google pode NÃO retornar refresh_token em logins subsequentes.
+          Então só atualize refresh_token se ele vier preenchido.
+        - expiry deve ser tz-aware (UTC).
+        """
+
         expiry = None
         if expires_in is not None:
             expiry = datetime.now(timezone.utc) + timedelta(seconds=int(expires_in))
@@ -41,8 +49,11 @@ class GoogleTokenService:
 
         if token:
             token.google_access_token = access_token
+
+            # Só sobrescreve refresh_token se vier um novo (não-vazio)
             if refresh_token:
                 token.google_refresh_token = refresh_token
+
             token.google_token_expiry = expiry
             token.scope = scope
         else:
@@ -59,13 +70,15 @@ class GoogleTokenService:
         db.refresh(token)
         return token
 
-    # ===== LEGADO / COMPARTILHADO: NÃO MEXER =====
+    # =========================
+    # LEGADO / COMPARTILHADO
+    # NÃO MEXER NO COMPORTAMENTO
+    # =========================
     @staticmethod
     def refresh_access_token(db: Session, token: GoogleToken) -> GoogleToken:
         """
-        Método compartilhado por outros processos.
-        Mantém comportamento antigo: tenta refresh e, se falhar, só lança erro.
-        NÃO apaga token do banco.
+        Faz refresh usando refresh_token salvo no banco e atualiza access + expiry.
+        Mantido como legado para não quebrar outros processos.
         """
         if not token.google_refresh_token:
             raise GoogleTokenRefreshFailed("Refresh token não existe para este usuário.")
@@ -89,6 +102,7 @@ class GoogleTokenService:
         data = response.json()
 
         token.google_access_token = data["access_token"]
+
         expires_in = int(data.get("expires_in", 3600))
         token.google_token_expiry = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
 
@@ -99,7 +113,8 @@ class GoogleTokenService:
     @staticmethod
     def get_valid_access_token(db: Session, user_id: int) -> str:
         """
-        Método compartilhado por outros processos.
+        Retorna access token válido.
+        Método legado/compartilhado.
         """
         token = GoogleTokenService.get_by_user(db, user_id)
         if not token:
@@ -112,12 +127,15 @@ class GoogleTokenService:
 
         return token.google_access_token
 
-    # ===== NOVO / ISOLADO: usar só na Agenda =====
+    # =========================
+    # NOVO / ISOLADO PARA AGENDA
+    # =========================
     @staticmethod
     def refresh_access_token_agenda(db: Session, token: GoogleToken) -> GoogleToken:
         """
         Variante isolada para a Agenda.
-        Não apaga token do banco. Só devolve erro marcado para o front reconectar.
+        Não altera o comportamento do fluxo legado.
+        Em invalid_grant, devolve erro marcado pro front pedir reconnect.
         """
         if not token.google_refresh_token:
             raise GoogleTokenRefreshFailed(
@@ -146,16 +164,20 @@ class GoogleTokenService:
                     "google_reauth_required: Token do Google expirou ou foi revogado. Reconecte sua conta."
                 )
 
-            raise GoogleTokenRefreshFailed(f"Erro ao renovar token Google: {response.text}")
+            raise GoogleTokenRefreshFailed(
+                f"Erro ao renovar token Google (agenda): {response.text}"
+            )
 
         data = response.json()
+
         access = data.get("access_token")
         if not access:
             raise GoogleTokenRefreshFailed(
-                f"Erro ao renovar token Google: resposta sem access_token ({data})"
+                f"Erro ao renovar token Google (agenda): resposta sem access_token ({data})"
             )
 
         token.google_access_token = access
+
         expires_in = int(data.get("expires_in", 3600))
         token.google_token_expiry = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
 

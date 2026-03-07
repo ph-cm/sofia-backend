@@ -1,7 +1,8 @@
 from google_auth_oauthlib.flow import Flow
-from app.core.config import settings
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
+
+from app.core.config import settings
 
 from datetime import datetime, timezone
 from urllib.parse import urlencode
@@ -18,17 +19,23 @@ class GoogleAuthService:
                 "token_uri": "https://oauth2.googleapis.com/token",
                 "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
                 "client_secret": settings.GOOGLE_CLIENT_SECRET,
-                "redirect_uris": [settings.GOOGLE_REDIRECT_URI]
+                "redirect_uris": [
+                    settings.GOOGLE_REDIRECT_URI,
+                    settings.GOOGLE_REDIRECT_URI_AGENDA,
+                ],
             }
         }
 
         self.scopes = settings.GOOGLE_SCOPES.split(",")
 
-    # ===== LEGADO / COMPARTILHADO: NÃO MEXER =====
+    # =========================
+    # LEGADO / COMPARTILHADO
+    # NÃO MEXER
+    # =========================
     def create_flow(self):
         flow = Flow.from_client_config(
             client_config=self.client_config,
-            scopes=self.scopes
+            scopes=self.scopes,
         )
         flow.redirect_uri = settings.GOOGLE_REDIRECT_URI
         return flow
@@ -39,7 +46,7 @@ class GoogleAuthService:
         auth_url, _ = flow.authorization_url(
             access_type="offline",
             prompt="consent",
-            state=str(user_id)
+            state=str(user_id),
         )
 
         return auth_url
@@ -82,10 +89,13 @@ class GoogleAuthService:
 
         return {
             "access": creds.token,
-            "expiry": creds.expiry
+            "expiry": creds.expiry,
         }
 
-    # ===== NOVO / ISOLADO PARA AGENDA =====
+    # =========================
+    # NOVO / ISOLADO PARA AGENDA
+    # sem Flow, sem PKCE, troca manual
+    # =========================
     def auth_url_agenda(self, user_id: int):
         params = {
             "client_id": settings.GOOGLE_CLIENT_ID,
