@@ -28,10 +28,8 @@ class GoogleAuthService:
 
         self.scopes = settings.GOOGLE_SCOPES.split(",")
 
-    # =========================
+     # =========================
     # LEGADO / COMPARTILHADO
-    # MANTÉM OS MESMOS MÉTODOS E ENDPOINTS
-    # MAS SEM DEPENDER DE PKCE
     # =========================
     def auth_url(self, user_id: int):
         params = {
@@ -90,6 +88,7 @@ class GoogleAuthService:
             "access": creds.token,
             "expiry": creds.expiry,
         }
+
 
     # =========================
     # NOVO / ISOLADO PARA AGENDA
