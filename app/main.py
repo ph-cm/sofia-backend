@@ -15,7 +15,7 @@ from app.api.endpoints import tenant_evolution
 from app.api.endpoints import chatwoot_provisioning
 from app.api.endpoints import finance
 from app.api.endpoints import analytics
-
+from app.api.endpoints import patients
 
 app = FastAPI(
     title="SaaS Secretaria Inteligente",
@@ -71,7 +71,7 @@ app.include_router(tenant_evolution.router)
 app.include_router(chatwoot_provisioning.router)
 app.include_router(finance.router)
 app.include_router(analytics.router)
-
+app.include_router(patients.router)
 # Exemplo: Usando uma variável de configuração
 @app.get("/")
 def read_root():
