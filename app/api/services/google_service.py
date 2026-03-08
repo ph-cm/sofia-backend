@@ -30,48 +30,47 @@ class GoogleAuthService:
 
     # =========================
     # LEGADO / COMPARTILHADO
-    # NÃO MEXER
+    # MANTÉM OS MESMOS MÉTODOS E ENDPOINTS
+    # MAS SEM DEPENDER DE PKCE
     # =========================
-    def create_flow(self):
-        flow = Flow.from_client_config(
-            client_config=self.client_config,
-            scopes=self.scopes,
-        )
-        flow.redirect_uri = settings.GOOGLE_REDIRECT_URI
-        return flow
-
     def auth_url(self, user_id: int):
-        flow = self.create_flow()
-
-        auth_url, _ = flow.authorization_url(
-            access_type="offline",
-            prompt="consent",
-            state=str(user_id),
-        )
-
-        return auth_url
+        params = {
+            "client_id": self.client_id,
+            "redirect_uri": settings.GOOGLE_REDIRECT_URI,
+            "response_type": "code",
+            "scope": " ".join(self.scopes),
+            "access_type": "offline",
+            "prompt": "consent",
+            "include_granted_scopes": "true",
+            "state": str(user_id),
+        }
+        return f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
 
     def exchange_code(self, code: str):
-        flow = self.create_flow()
-        flow.fetch_token(code=code)
+        response = requests.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "code": code,
+                "client_id": self.client_id,
+                "client_secret": self.client_secret,
+                "redirect_uri": settings.GOOGLE_REDIRECT_URI,
+                "grant_type": "authorization_code",
+            },
+            timeout=30,
+        )
 
-        credentials = flow.credentials
+        if response.status_code != 200:
+            raise Exception(f"Falha ao trocar code por token (legado): {response.text}")
 
-        expiry = credentials.expiry
-        if expiry and expiry.tzinfo is None:
-            expiry = expiry.replace(tzinfo=timezone.utc)
-
-        expires_in = None
-        if expiry:
-            expires_in = int((expiry - datetime.now(timezone.utc)).total_seconds())
+        data = response.json()
+        expires_in = int(data.get("expires_in", 3600))
 
         return {
-            "access": credentials.token,
-            "refresh": credentials.refresh_token,
-            "expiry": expiry,
+            "access": data["access_token"],
+            "refresh": data.get("refresh_token"),
             "expires_in": expires_in,
-            "scope": " ".join(credentials.scopes) if credentials.scopes else None,
-            "token_type": credentials.token_uri and "Bearer",
+            "scope": data.get("scope"),
+            "token_type": data.get("token_type"),
         }
 
     def refresh_access_token(self, access_token: str, refresh_token: str):
@@ -79,8 +78,8 @@ class GoogleAuthService:
             token=access_token,
             refresh_token=refresh_token,
             token_uri="https://oauth2.googleapis.com/token",
-            client_id=settings.GOOGLE_CLIENT_ID,
-            client_secret=settings.GOOGLE_CLIENT_SECRET,
+            client_id=self.client_id,
+            client_secret=self.client_secret,
         )
 
         if not creds.valid:
