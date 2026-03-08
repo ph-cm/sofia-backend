@@ -65,7 +65,7 @@ class GoogleCalendarEventsCRUD:
         description: Optional[str] = None,
         location: Optional[str] = None,
     ) -> Dict[str, Any]:
-        token = GoogleTokenService.get_valid_access_token(db=db, user_id=user_id)
+        token = GoogleTokenService.get_valid_access_token_agenda(db=db, user_id=user_id)
 
         url = f"{GOOGLE_CAL_BASE}/calendars/{calendar_id}/events"
         headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
@@ -137,7 +137,7 @@ class GoogleCalendarEventsCRUD:
         calendar_id: str,
         event_id: str,
     ) -> bool:
-        token = GoogleTokenService.get_valid_access_token(db=db, user_id=user_id)
+        token = GoogleTokenService.get_valid_access_token_agenda(db=db, user_id=user_id)
 
         url = f"{GOOGLE_CAL_BASE}/calendars/{calendar_id}/events/{event_id}"
         headers = {"Authorization": f"Bearer {token}"}
@@ -162,7 +162,7 @@ class GoogleCalendarEventsCRUD:
         telefone: Optional[str] = None,
         max_results: int = 250,
     ) -> List[Dict[str, Any]]:
-        token = GoogleTokenService.get_valid_access_token(db=db, user_id=user_id)
+        token = GoogleTokenService.get_valid_access_token_agenda(db=db, user_id=user_id)
 
         params: Dict[str, Any] = {
             "singleEvents": "true",

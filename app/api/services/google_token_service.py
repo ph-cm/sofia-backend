@@ -187,16 +187,14 @@ class GoogleTokenService:
 
     @staticmethod
     def get_valid_access_token_agenda(db: Session, user_id: int) -> str:
-        """
-        Variante isolada para endpoints da Agenda.
-        """
         token = GoogleTokenService.get_by_user(db, user_id)
         if not token:
             raise GoogleTokenNotFound("Usuário não conectado ao Google")
 
         now = datetime.now(timezone.utc)
+        refresh_threshold = now + timedelta(minutes=2)
 
-        if (not token.google_token_expiry) or (token.google_token_expiry <= now):
+        if (not token.google_token_expiry) or (token.google_token_expiry <= refresh_threshold):
             token = GoogleTokenService.refresh_access_token_agenda(db, token)
 
         return token.google_access_token
