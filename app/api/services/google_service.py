@@ -11,24 +11,11 @@ import requests
 
 class GoogleAuthService:
     def __init__(self):
-        self.client_config = {
-            "web": {
-                "client_id": settings.GOOGLE_CLIENT_ID,
-                "project_id": "saas-secretaria",
-                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                "token_uri": "https://oauth2.googleapis.com/token",
-                "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-                "client_secret": settings.GOOGLE_CLIENT_SECRET,
-                "redirect_uris": [
-                    settings.GOOGLE_REDIRECT_URI,
-                    settings.GOOGLE_REDIRECT_URI_AGENDA,
-                ],
-            }
-        }
-
+        self.client_id = settings.GOOGLE_CLIENT_ID
+        self.client_secret = settings.GOOGLE_CLIENT_SECRET
         self.scopes = settings.GOOGLE_SCOPES.split(",")
 
-     # =========================
+    # =========================
     # LEGADO / COMPARTILHADO
     # =========================
     def auth_url(self, user_id: int):
@@ -88,7 +75,6 @@ class GoogleAuthService:
             "access": creds.token,
             "expiry": creds.expiry,
         }
-
 
     # =========================
     # NOVO / ISOLADO PARA AGENDA
