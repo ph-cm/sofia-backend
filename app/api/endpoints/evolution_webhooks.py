@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import base64
+
 from fastapi import APIRouter, Request
 from typing import Any, Dict, Optional
 
 from app.core.config import settings
 from app.api.services.chatwoot_service import ChatwootService
 from app.api.services.tenant_service import TenantService
+from app.api.services.evolution_service import EvolutionService
 from app.db.session import SessionLocal
 from app.api.services.conversation_map_service import ConversationMapService
 
@@ -26,8 +29,6 @@ def log_err(instance_name: str, msg: str, extra: dict | None = None):
     extra = extra or {}
     print(f"EVOLUTION_ERROR: instance={instance_name} msg={msg} extra={extra}")
 
-
-# ---------- Extractors (tolerantes) ----------
 
 def extract_instance_name(payload: Dict[str, Any]) -> Optional[str]:
     inst = payload.get("instance")
@@ -125,6 +126,7 @@ def extract_message(payload: Dict[str, Any]) -> Dict[str, Any]:
             "seconds": audio.get("seconds"),
             "ptt": bool(audio.get("ptt", False)),
             "file_sha256": audio.get("fileSha256"),
+            "raw_media_message": audio,
         }
 
     image = msg.get("imageMessage")
@@ -161,23 +163,20 @@ def extract_dedup_key(payload: Dict[str, Any]) -> Optional[str]:
     return mid if isinstance(mid, str) and mid.strip() else None
 
 
-# ---------- Helpers ----------
-
 def safe_extract_id(obj: Any, label: str, instance_name: str) -> Optional[int]:
-    """
-    Usa o extractor tolerante do ChatwootService para pegar o id.
-    """
     try:
-        cid = ChatwootService._extract_id(obj)  # staticmethod do service robusto
+        cid = ChatwootService._extract_id(obj)
         if not cid:
-            log_err(instance_name, "missing_id", {"label": label, "type": type(obj).__name__, "keys": list(obj.keys()) if isinstance(obj, dict) else None})
+            log_err(instance_name, "missing_id", {
+                "label": label,
+                "type": type(obj).__name__,
+                "keys": list(obj.keys()) if isinstance(obj, dict) else None
+            })
         return cid
     except Exception as e:
         log_err(instance_name, "extract_id_exception", {"label": label, "error": repr(e)})
         return None
 
-
-# ---------- Route ----------
 
 @router.post("/{event}")
 async def evolution_webhook(event: str, request: Request):
@@ -202,7 +201,6 @@ async def evolution_webhook(event: str, request: Request):
 
         remote_jid = extract_remote_jid(payload)
 
-        # (você está ignorando grupos — então NUNCA vai aparecer no Chatwoot)
         if isinstance(remote_jid, str) and remote_jid.endswith("@g.us"):
             log_ignore(instance_name, "group_message", {"remote_jid": remote_jid})
             return {"ok": True, "ignored": "group_message"}
@@ -253,7 +251,6 @@ async def evolution_webhook(event: str, request: Request):
             account_id=int(tenant["chatwoot_account_id"]),
         )
 
-        # 1) contato
         contact_name = push_name or phone
         contact = cw.get_or_create_contact(name=contact_name, phone_e164=f"+{phone}")
         contact_id = safe_extract_id(contact, "contact", instance_name)
@@ -263,23 +260,17 @@ async def evolution_webhook(event: str, request: Request):
             log_err(instance_name, "stop_no_contact_id", {"note": "Chatwoot respondeu sem id para contato"})
             return {"ok": True, "ignored": "chatwoot_no_contact_id"}
 
-        # 2) conversa
-        conv = cw.get_or_create_conversation(inbox_id=int(tenant["chatwoot_inbox_id"]), contact_id=int(contact_id))
+        conv = cw.get_or_create_conversation(
+            inbox_id=int(tenant["chatwoot_inbox_id"]),
+            contact_id=int(contact_id)
+        )
         conv_id = safe_extract_id(conv, "conversation", instance_name)
         log_info(instance_name, "chatwoot_conversation_result", {"conversation_id": conv_id, "inbox_id": tenant.get("chatwoot_inbox_id")})
 
         if not conv_id:
             log_err(instance_name, "stop_no_conversation_id", {"note": "Chatwoot respondeu sem id para conversa"})
             return {"ok": True, "ignored": "chatwoot_no_conversation_id"}
-                # 2) conversa
-        conv = cw.get_or_create_conversation(inbox_id=int(tenant["chatwoot_inbox_id"]), contact_id=int(contact_id))
-        conv_id = safe_extract_id(conv, "conversation", instance_name)
-        log_info(instance_name, "chatwoot_conversation_result", {"conversation_id": conv_id, "inbox_id": tenant.get("chatwoot_inbox_id")})
 
-        if not conv_id:
-            log_err(instance_name, "stop_no_conversation_id", {"note": "Chatwoot respondeu sem id para conversa"})
-            return {"ok": True, "ignored": "chatwoot_no_conversation_id"}
-                # ✅ salva mapping (conversation -> phone) para o outgoing do Chatwoot conseguir enviar no WhatsApp
         try:
             db = SessionLocal()
             try:
@@ -303,32 +294,62 @@ async def evolution_webhook(event: str, request: Request):
         except Exception as e:
             log_err(instance_name, "cw_map_save_failed", {"error": repr(e), "conversation_id": conv_id})
 
-        # 3) mensagem
         created = None
 
         if msg_type == "text":
             content = message.get("content") or "(sem texto)"
-            created = cw.create_message(conversation_id=int(conv_id), content=content, message_type="incoming")
+            created = cw.create_message(
+                conversation_id=int(conv_id),
+                content=content,
+                message_type="incoming"
+            )
 
         elif msg_type == "audio":
-            url = message.get("url")
-            if url:
-                created = cw.create_message_with_media(
-                    conversation_id=int(conv_id),
-                    media_url=url,
-                    content="🎤 Áudio recebido",
-                    message_type="incoming",
-                    media_type="audio",
-                    filename="audio.mp3",
-                )
-            else:
+            raw_media_message = message.get("raw_media_message")
+
+            if not raw_media_message:
                 created = cw.create_message(
                     conversation_id=int(conv_id),
                     content="🎤 Áudio recebido",
                     message_type="incoming",
                 )
+            else:
+                evo_media = EvolutionService.download_media_base64(
+                    instance_name=instance_name,
+                    message=raw_media_message,
+                )
 
+                possible_base64 = (
+                    evo_media.get("base64")
+                    or evo_media.get("data")
+                    or evo_media.get("media")
+                    or evo_media.get("file")
+                    or evo_media.get("buffer")
+                )
 
+                if isinstance(possible_base64, dict):
+                    possible_base64 = (
+                        possible_base64.get("base64")
+                        or possible_base64.get("data")
+                    )
+
+                if not possible_base64 or not isinstance(possible_base64, str):
+                    raise RuntimeError(f"Evolution não retornou base64 do áudio: {evo_media}")
+
+                if "," in possible_base64 and possible_base64.startswith("data:"):
+                    possible_base64 = possible_base64.split(",", 1)[1]
+
+                audio_bytes = base64.b64decode(possible_base64)
+
+                created = cw.create_message_with_media_bytes(
+                    conversation_id=int(conv_id),
+                    file_bytes=audio_bytes,
+                    content="🎤 Áudio recebido",
+                    message_type="incoming",
+                    media_type="audio",
+                    filename="audio.ogg",
+                    mime_type=message.get("mimetype") or "audio/ogg",
+                )
 
         elif msg_type == "image":
             url = message.get("url")
@@ -386,5 +407,4 @@ async def evolution_webhook(event: str, request: Request):
                 "error": repr(e),
             },
         )
-        # não devolve 500 pra evitar retry infinito
         return {"ok": True, "ignored": "exception", "error": str(e)}

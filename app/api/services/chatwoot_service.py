@@ -350,6 +350,63 @@ class ChatwootService:
             {"id": self._extract_id(data), "conversation_id": conversation_id, "type": message_type},
         )
         return data if isinstance(data, dict) else {"raw": data}
+    
+    def create_message_with_media_bytes(
+        self,
+        conversation_id: int,
+        file_bytes: bytes,
+        content: str = "",
+        message_type: str = "incoming",
+        media_type: Optional[str] = None,
+        filename: Optional[str] = None,
+        mime_type: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        path = f"/api/v1/accounts/{self.account_id}/conversations/{conversation_id}/messages"
+        url = self._url(path)
+
+        safe_filename, safe_mime = self._guess_filename_and_mime(
+            media_url=filename or "file.bin",
+            media_type=media_type,
+            fallback_filename=filename,
+            response_content_type=mime_type,
+        )
+
+        files = {
+            "attachments[]": (
+                safe_filename,
+                file_bytes,
+                mime_type or safe_mime,
+            )
+        }
+
+        data = {
+            "content": content,
+            "message_type": message_type,
+        }
+
+        r = requests.post(
+            url,
+            data=data,
+            files=files,
+            headers=self._headers_multipart(),
+            timeout=60,
+        )
+        self._raise(r, "Chatwoot create_message_with_media_bytes failed")
+        data_resp = r.json()
+        self._log_http("POST", path, r, data_resp)
+
+        print(
+            "CHATWOOT_MESSAGE_MEDIA_BYTES_CREATED:",
+            {
+                "id": self._extract_id(data_resp),
+                "conversation_id": conversation_id,
+                "type": message_type,
+                "filename": safe_filename,
+                "mime_type": mime_type or safe_mime,
+                "media_type": media_type,
+            },
+        )
+        return data_resp if isinstance(data_resp, dict) else {"raw": data_resp}
 
     def create_message_with_media(
         self,
