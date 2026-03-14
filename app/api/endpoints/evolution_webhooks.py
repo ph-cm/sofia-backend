@@ -307,39 +307,18 @@ async def evolution_webhook(event: str, request: Request):
 
         elif msg_type == "audio":
             raw_media_message = message.get("raw_media_message")
-            raw_event_data = message.get("raw_event_data")
 
             if not raw_media_message:
                 created = cw.create_message(
                     conversation_id=int(conv_id),
-                    content="🎤 Áudio recebido",
+                    content="",
                     message_type="incoming",
                 )
             else:
-                evo_media = None
-                last_error = None
-
-                # tentativa 1: manda o message completo
-                try:
-                    evo_media = EvolutionService.download_media_base64(
-                        instance_name=instance_name,
-                        message=raw_media_message,
-                    )
-                except Exception as e:
-                    last_error = e
-
-                # tentativa 2: manda o data inteiro do webhook
-                if evo_media is None and raw_event_data:
-                    try:
-                        evo_media = EvolutionService.download_media_base64(
-                            instance_name=instance_name,
-                            message=raw_event_data,
-                        )
-                    except Exception as e:
-                        last_error = e
-
-                if evo_media is None:
-                    raise RuntimeError(f"Falha ao obter mídia da Evolution: {repr(last_error)}")
+                evo_media = EvolutionService.download_media_base64(
+                    instance_name=instance_name,
+                    message=raw_media_message,
+                )
 
                 possible_base64 = (
                     evo_media.get("base64")
@@ -358,7 +337,7 @@ async def evolution_webhook(event: str, request: Request):
                 if not possible_base64 or not isinstance(possible_base64, str):
                     raise RuntimeError(f"Evolution não retornou base64 do áudio: {evo_media}")
 
-                if possible_base64.startswith("data:") and "," in possible_base64:
+                if "," in possible_base64 and possible_base64.startswith("data:"):
                     possible_base64 = possible_base64.split(",", 1)[1]
 
                 audio_bytes = base64.b64decode(possible_base64)
@@ -366,7 +345,7 @@ async def evolution_webhook(event: str, request: Request):
                 created = cw.create_message_with_media_bytes(
                     conversation_id=int(conv_id),
                     file_bytes=audio_bytes,
-                    content="🎤 Áudio recebido",
+                    content="",  # <- AQUI é o principal: sem texto fake
                     message_type="incoming",
                     media_type="audio",
                     filename="audio.ogg",

@@ -380,9 +380,11 @@ class ChatwootService:
         }
 
         data = {
-            "content": content,
             "message_type": message_type,
         }
+
+        if isinstance(content, str) and content.strip():
+            data["content"] = content.strip()
 
         r = requests.post(
             url,

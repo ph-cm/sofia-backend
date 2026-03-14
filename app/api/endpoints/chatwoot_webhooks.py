@@ -126,11 +126,6 @@ def extract_recipient_phone(payload: Dict[str, Any]) -> Optional[str]:
 
 #     return {"kind": "empty"}
 def extract_text_or_audio(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Normaliza conteúdo outgoing:
-      {"kind": "text", "text": "..."}
-      {"kind": "audio", "url": "...", "ptt": False}
-    """
     msg = payload.get("message") if isinstance(payload.get("message"), dict) else payload
 
     attachments = msg.get("attachments")
