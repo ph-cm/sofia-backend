@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import mimetypes
 import requests
 from typing import Any, Dict, Optional, List
 
@@ -10,10 +12,21 @@ class ChatwootService:
         self.api_token = api_token
         self.account_id = account_id
 
+    # =========================
+    # HEADERS
+    # =========================
     def _headers(self) -> Dict[str, str]:
         return {
             "api_access_token": self.api_token,
             "Content-Type": "application/json",
+        }
+
+    def _headers_multipart(self) -> Dict[str, str]:
+        # IMPORTANTE:
+        # não mandar Content-Type aqui.
+        # O requests define multipart/form-data automaticamente.
+        return {
+            "api_access_token": self.api_token,
         }
 
     def _url(self, path: str) -> str:
@@ -30,23 +43,17 @@ class ChatwootService:
             {"method": method, "path": path, "status": r.status_code, "keys": keys},
         )
 
-    # ---------- Unwrappers / Extractors ----------
-
+    # =========================
+    # UNWRAPPERS / EXTRACTORS
+    # =========================
     @staticmethod
     def _unwrap_payload(data: Any) -> Any:
-        # Chatwoot às vezes devolve {"payload": ...}
         if isinstance(data, dict) and "payload" in data:
             return data["payload"]
         return data
 
     @staticmethod
     def _unwrap_contact(data: Any) -> Any:
-        """
-        Alguns retornos vêm como:
-          {"payload": {...}}
-        ou
-          {"contact": {...}, "contact_inbox": {...}}
-        """
         data = ChatwootService._unwrap_payload(data)
         if isinstance(data, dict) and "contact" in data and isinstance(data["contact"], dict):
             return data["contact"]
@@ -54,30 +61,23 @@ class ChatwootService:
 
     @staticmethod
     def _extract_id(obj: Any) -> Optional[int]:
-        """
-        Extrai id de vários formatos possíveis do Chatwoot.
-        """
         if obj is None:
             return None
 
-        # lista de objetos
         if isinstance(obj, list):
             if not obj:
                 return None
             return ChatwootService._extract_id(obj[0])
 
         if isinstance(obj, dict):
-            # direto
             v = obj.get("id")
             if isinstance(v, int):
                 return v
 
-            # payload
             payload = obj.get("payload")
             if payload is not None:
                 return ChatwootService._extract_id(payload)
 
-            # wrappers comuns
             for k in ("contact", "conversation", "message"):
                 inner = obj.get(k)
                 if isinstance(inner, dict):
@@ -85,7 +85,6 @@ class ChatwootService:
                     if isinstance(vid, int):
                         return vid
 
-            # alguns retornos: {"data": {"id": ...}}
             inner_data = obj.get("data")
             if isinstance(inner_data, dict):
                 vid = inner_data.get("id")
@@ -93,55 +92,70 @@ class ChatwootService:
                     return vid
 
         return None
-    
-        # ---------- Inboxes ----------
 
-    
-    # def create_api_inbox(self, name: str) -> Dict[str, Any]:
-    #     """
-    #     Cria um inbox do tipo API no Chatwoot.
-    #     Esse inbox será usado para receber e enviar mensagens via API/webhooks.
-    #     """
-    #     path = f"/api/v1/accounts/{self.account_id}/inboxes"
-    #     url = self._url(path)
+    @staticmethod
+    def extract_phone_from_contact(contact_payload: Dict[str, Any]) -> Optional[str]:
+        contact = (
+            contact_payload.get("payload")
+            if isinstance(contact_payload, dict) and isinstance(contact_payload.get("payload"), dict)
+            else contact_payload
+        )
+        if not isinstance(contact, dict):
+            return None
 
-    #     payload = {
-    #         "name": name,
-    #         "channel": {
-    #             "type": "api"
-    #         }
-    #     }
+        for k in ("phone_number", "phone", "phoneNumber"):
+            v = contact.get(k)
+            if isinstance(v, str) and v.strip():
+                return v.strip()
+        return None
 
-    #     r = requests.post(url, json=payload, headers=self._headers(), timeout=30)
-    #     self._raise(r, "Chatwoot create_api_inbox failed")
-    #     data = r.json()
-    #     self._log_http("POST", path, r, data)
+    @staticmethod
+    def _guess_filename_and_mime(
+        media_url: str,
+        media_type: Optional[str] = None,
+        fallback_filename: Optional[str] = None,
+        response_content_type: Optional[str] = None,
+    ) -> tuple[str, str]:
+        mt = (media_type or "").lower().strip()
 
-    #     # Normaliza retorno: pode vir {"payload": {...}} dependendo da versão
-    #     unwrapped = self._unwrap_payload(data)
+        if mt == "audio":
+            return (fallback_filename or "audio.ogg", response_content_type or "audio/ogg")
+        if mt == "image":
+            return (fallback_filename or "image.jpg", response_content_type or "image/jpeg")
+        if mt == "video":
+            return (fallback_filename or "video.mp4", response_content_type or "video/mp4")
+        if mt == "document":
+            guessed = mimetypes.guess_type(fallback_filename or "")[0]
+            return (
+                fallback_filename or "document.bin",
+                response_content_type or guessed or "application/octet-stream",
+            )
 
-    #     inbox_id = self._extract_id(unwrapped)
-    #     print("CHATWOOT_INBOX_CREATED:", {"id": inbox_id, "name": name})
+        # tenta inferir pela URL/nome
+        guessed = mimetypes.guess_type(media_url)[0]
+        if fallback_filename:
+            guessed2 = mimetypes.guess_type(fallback_filename)[0]
+            guessed = guessed2 or guessed
 
-    #     return unwrapped if isinstance(unwrapped, dict) else {"raw": unwrapped}
+        return (
+            fallback_filename or "file.bin",
+            response_content_type or guessed or "application/octet-stream",
+        )
+
+    # =========================
+    # INBOXES
+    # =========================
     def create_api_inbox(
         self,
         name: str,
         webhook_url: Optional[str] = None,
         webhook_secret: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """
-        Cria um Inbox do tipo API (Channel::Api) corretamente configurado.
-        """
-
         path = f"/api/v1/accounts/{self.account_id}/inboxes"
         url = self._url(path)
 
-        channel_payload: Dict[str, Any] = {
-            "type": "api"
-        }
+        channel_payload: Dict[str, Any] = {"type": "api"}
 
-        # Se quiser que Chatwoot envie outgoing para sua API
         if webhook_url:
             channel_payload["webhook_url"] = webhook_url
 
@@ -165,8 +179,6 @@ class ChatwootService:
             return {"raw": inbox_obj}
 
         inbox_id = inbox_obj.get("id")
-
-        # Extrai identificador corretamente
         identifier = (
             inbox_obj.get("inbox_identifier")
             or inbox_obj.get("identifier")
@@ -193,10 +205,9 @@ class ChatwootService:
             "raw": inbox_obj,
         }
 
-
-
-    # ---------- Contacts ----------
-
+    # =========================
+    # CONTACTS
+    # =========================
     def search_contact(self, phone_e164: str) -> Optional[Dict[str, Any]]:
         path = f"/api/v1/accounts/{self.account_id}/contacts/search"
         url = self._url(path)
@@ -208,7 +219,6 @@ class ChatwootService:
 
         items = self._unwrap_payload(data)
         if isinstance(items, list) and items:
-            # itens geralmente já vem com id no topo
             return items[0]
 
         return None
@@ -223,10 +233,12 @@ class ChatwootService:
         data = r.json()
         self._log_http("POST", path, r, data)
 
-        # IMPORTANTÍSSIMO: normaliza retorno que veio como {"contact": {...}}
         contact = self._unwrap_contact(data)
 
-        print("CHATWOOT_CONTACT_CREATED:", {"id": self._extract_id(contact), "name": name, "phone": phone_e164})
+        print(
+            "CHATWOOT_CONTACT_CREATED:",
+            {"id": self._extract_id(contact), "name": name, "phone": phone_e164},
+        )
         return contact if isinstance(contact, dict) else {"raw": contact}
 
     def get_or_create_contact(self, name: str, phone_e164: str) -> Dict[str, Any]:
@@ -236,8 +248,15 @@ class ChatwootService:
             return found
         return self.create_contact(name=name, phone_e164=phone_e164)
 
-    # ---------- Conversations ----------
+    def get_contact(self, contact_id: int) -> Dict[str, Any]:
+        url = self._url(f"/api/v1/accounts/{self.account_id}/contacts/{contact_id}")
+        r = requests.get(url, headers=self._headers(), timeout=30)
+        self._raise(r, "Chatwoot get_contact failed")
+        return r.json()
 
+    # =========================
+    # CONVERSATIONS
+    # =========================
     def create_conversation(self, inbox_id: int, contact_id: int) -> Dict[str, Any]:
         path = f"/api/v1/accounts/{self.account_id}/conversations"
         url = self._url(path)
@@ -248,74 +267,23 @@ class ChatwootService:
         data = r.json()
         self._log_http("POST", path, r, data)
 
-        print("CHATWOOT_CONVERSATION_CREATED:", {"id": self._extract_id(data), "inbox_id": inbox_id, "contact_id": contact_id})
+        print(
+            "CHATWOOT_CONVERSATION_CREATED:",
+            {"id": self._extract_id(data), "inbox_id": inbox_id, "contact_id": contact_id},
+        )
         return data if isinstance(data, dict) else {"raw": data}
 
     def get_or_create_conversation(self, inbox_id: int, contact_id: int) -> Dict[str, Any]:
-        # MVP: cria sempre
         return self.create_conversation(inbox_id=inbox_id, contact_id=contact_id)
 
-    # ---------- Messages ----------
-
-    def create_message(
-        self,
-        conversation_id: int,
-        content: str,
-        message_type: str = "incoming",
-        attachments: Optional[List[Dict[str, Any]]] = None,
-    ) -> Dict[str, Any]:
-        path = f"/api/v1/accounts/{self.account_id}/conversations/{conversation_id}/messages"
-        url = self._url(path)
-
-        payload: Dict[str, Any] = {
-            "content": content,
-            "message_type": message_type,
-        }
-
-        # atenção: attachments via external_url pode não ser suportado em todas versões
-        if attachments:
-            payload["attachments"] = attachments
-
-        r = requests.post(url, json=payload, headers=self._headers(), timeout=30)
-        self._raise(r, "Chatwoot create_message failed")
-        data = r.json()
-        self._log_http("POST", path, r, data)
-
-        print("CHATWOOT_MESSAGE_CREATED:", {"id": self._extract_id(data), "conversation_id": conversation_id, "type": message_type})
-        return data if isinstance(data, dict) else {"raw": data}
-    
-    def get_contact(self, contact_id: int) -> Dict[str, Any]:
-        url = self._url(f"/api/v1/accounts/{self.account_id}/contacts/{contact_id}")
+    def get_conversation(self, conversation_id: int) -> Dict[str, Any]:
+        url = self._url(f"/api/v1/accounts/{self.account_id}/conversations/{conversation_id}")
         r = requests.get(url, headers=self._headers(), timeout=30)
-        self._raise(r, "Chatwoot get_contact failed")
+        self._raise(r, "Chatwoot get_conversation failed")
         return r.json()
-    
-    def extract_phone_from_contact(contact_payload: Dict[str, Any]) -> Optional[str]:
-        # chatwoot pode devolver {"payload": {...}} ou direto {...}
-        contact = contact_payload.get("payload") if isinstance(contact_payload, dict) and isinstance(contact_payload.get("payload"), dict) else contact_payload
-        if not isinstance(contact, dict):
-            return None
 
-        for k in ("phone_number", "phone", "phoneNumber"):
-            v = contact.get(k)
-            if isinstance(v, str) and v.strip():
-                return v.strip()
-        return None
-    
     @staticmethod
-    def extract_phone_from_contact(contact_payload: Dict[str, Any]) -> Optional[str]:
-        contact = contact_payload.get("payload") if isinstance(contact_payload, dict) and isinstance(contact_payload.get("payload"), dict) else contact_payload
-        if not isinstance(contact, dict):
-            return None
-
-        for k in ("phone_number", "phone", "phoneNumber"):
-            v = contact.get(k)
-            if isinstance(v, str) and v.strip():
-                return v.strip()
-        return None
-    
     def _extract_contact_id(conv: Dict[str, Any]) -> Optional[int]:
-        # forma 1: conversation.contact.id
         c = conv.get("contact")
         if isinstance(c, dict):
             v = c.get("id")
@@ -324,65 +292,108 @@ class ChatwootService:
             except Exception:
                 pass
 
-        # forma 2: conversation.contact_id
         v = conv.get("contact_id")
         try:
             return int(v) if v is not None else None
         except Exception:
             return None
-    # No final da classe ChatwootService, junto com os métodos de conversation
 
-    def get_conversation(self, conversation_id: int) -> Dict[str, Any]:
-        url = self._url(f"/api/v1/accounts/{self.account_id}/conversations/{conversation_id}")
-        r = requests.get(url, headers=self._headers(), timeout=30)
-        self._raise(r, "Chatwoot get_conversation failed")
-        return r.json()
-    
-    # def create_inbox_api(
-    #     self,
-    #     name: str,
-    #     webhook_url: str,
-    #     webhook_secret: str,
-    # ) -> Dict[str, Any]:
-    #     """
-    #     Cria um Inbox do tipo "API" (Channel::Api).
-    #     - Esse é o inbox ideal quando você controla todo o WhatsApp via Evolution,
-    #       e só quer o Chatwoot como UI/roteador interno.
-    #     - O Chatwoot vai chamar seu webhook quando mensagens outgoing forem enviadas.
-    #     """
-    #     path = f"/api/v1/accounts/{self.account_id}/inboxes"
-    #     url = self._url(path)
+    # =========================
+    # MESSAGES
+    # =========================
+    def create_message(
+        self,
+        conversation_id: int,
+        content: str,
+        message_type: str = "incoming",
+        attachments: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Mantido para texto/json.
+        Não usar este método para mídia real.
+        """
+        path = f"/api/v1/accounts/{self.account_id}/conversations/{conversation_id}/messages"
+        url = self._url(path)
 
-    #     payload = {
-    #         "name": name,
-    #         "channel": {
-    #             "type": "api",
-    #             "webhook_url": webhook_url,
-    #             "webhook_secret": webhook_secret,
-    #         },
-    #     }
+        payload: Dict[str, Any] = {
+            "content": content,
+            "message_type": message_type,
+        }
 
-    #     r = requests.post(url, json=payload, headers=self._headers(), timeout=30)
-    #     self._raise(r, "Chatwoot create_inbox_api failed")
-    #     data = r.json()
-    #     self._log_http("POST", path, r, data)
+        if attachments:
+            payload["attachments"] = attachments
 
-    #     # Normaliza possíveis wrappers
-    #     inbox_obj = self._unwrap_payload(data)
+        r = requests.post(url, json=payload, headers=self._headers(), timeout=30)
+        self._raise(r, "Chatwoot create_message failed")
+        data = r.json()
+        self._log_http("POST", path, r, data)
 
-    #     inbox_id = self._extract_id(inbox_obj)
-    #     # identifier varia por versão; guardamos o que existir
-    #     inbox_identifier = None
-    #     if isinstance(inbox_obj, dict):
-    #         inbox_identifier = (
-    #             inbox_obj.get("inbox_identifier")
-    #             or inbox_obj.get("identifier")
-    #             or inbox_obj.get("channel_id")
-    #             or inbox_obj.get("channel", {}).get("identifier") if isinstance(inbox_obj.get("channel"), dict) else None
-    #         )
+        print(
+            "CHATWOOT_MESSAGE_CREATED:",
+            {"id": self._extract_id(data), "conversation_id": conversation_id, "type": message_type},
+        )
+        return data if isinstance(data, dict) else {"raw": data}
 
-    #     print("CHATWOOT_INBOX_CREATED:", {"id": inbox_id, "name": name, "identifier": inbox_identifier})
-    #     return inbox_obj if isinstance(inbox_obj, dict) else {"raw": inbox_obj}
+    def create_message_with_media(
+        self,
+        conversation_id: int,
+        media_url: str,
+        content: str = "",
+        message_type: str = "incoming",
+        media_type: Optional[str] = None,
+        filename: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Baixa a mídia e reenvi a para o Chatwoot como attachment real.
+        Use este método para audio/image/video/document.
+        """
+        path = f"/api/v1/accounts/{self.account_id}/conversations/{conversation_id}/messages"
+        url = self._url(path)
 
+        media_response = requests.get(media_url, timeout=60)
+        media_response.raise_for_status()
 
+        response_content_type = media_response.headers.get("Content-Type")
+        safe_filename, safe_mime = self._guess_filename_and_mime(
+            media_url=media_url,
+            media_type=media_type,
+            fallback_filename=filename,
+            response_content_type=response_content_type,
+        )
 
+        files = {
+            "attachments[]": (
+                safe_filename,
+                media_response.content,
+                safe_mime,
+            )
+        }
+
+        data = {
+            "content": content,
+            "message_type": message_type,
+        }
+
+        r = requests.post(
+            url,
+            data=data,
+            files=files,
+            headers=self._headers_multipart(),
+            timeout=60,
+        )
+        self._raise(r, "Chatwoot create_message_with_media failed")
+        data_resp = r.json()
+        self._log_http("POST", path, r, data_resp)
+
+        print(
+            "CHATWOOT_MESSAGE_MEDIA_CREATED:",
+            {
+                "id": self._extract_id(data_resp),
+                "conversation_id": conversation_id,
+                "type": message_type,
+                "filename": safe_filename,
+                "mime_type": safe_mime,
+                "media_type": media_type,
+            },
+        )
+        return data_resp if isinstance(data_resp, dict) else {"raw": data_resp}
