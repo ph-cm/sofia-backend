@@ -126,7 +126,8 @@ def extract_message(payload: Dict[str, Any]) -> Dict[str, Any]:
             "seconds": audio.get("seconds"),
             "ptt": bool(audio.get("ptt", False)),
             "file_sha256": audio.get("fileSha256"),
-            "raw_media_message": audio,
+            "raw_media_message": msg,
+            "raw_event_data": data,
         }
 
     image = msg.get("imageMessage")
@@ -306,6 +307,7 @@ async def evolution_webhook(event: str, request: Request):
 
         elif msg_type == "audio":
             raw_media_message = message.get("raw_media_message")
+            raw_event_data = message.get("raw_event_data")
 
             if not raw_media_message:
                 created = cw.create_message(
@@ -314,10 +316,30 @@ async def evolution_webhook(event: str, request: Request):
                     message_type="incoming",
                 )
             else:
-                evo_media = EvolutionService.download_media_base64(
-                    instance_name=instance_name,
-                    message=raw_media_message,
-                )
+                evo_media = None
+                last_error = None
+
+                # tentativa 1: manda o message completo
+                try:
+                    evo_media = EvolutionService.download_media_base64(
+                        instance_name=instance_name,
+                        message=raw_media_message,
+                    )
+                except Exception as e:
+                    last_error = e
+
+                # tentativa 2: manda o data inteiro do webhook
+                if evo_media is None and raw_event_data:
+                    try:
+                        evo_media = EvolutionService.download_media_base64(
+                            instance_name=instance_name,
+                            message=raw_event_data,
+                        )
+                    except Exception as e:
+                        last_error = e
+
+                if evo_media is None:
+                    raise RuntimeError(f"Falha ao obter mídia da Evolution: {repr(last_error)}")
 
                 possible_base64 = (
                     evo_media.get("base64")
@@ -336,7 +358,7 @@ async def evolution_webhook(event: str, request: Request):
                 if not possible_base64 or not isinstance(possible_base64, str):
                     raise RuntimeError(f"Evolution não retornou base64 do áudio: {evo_media}")
 
-                if "," in possible_base64 and possible_base64.startswith("data:"):
+                if possible_base64.startswith("data:") and "," in possible_base64:
                     possible_base64 = possible_base64.split(",", 1)[1]
 
                 audio_bytes = base64.b64decode(possible_base64)
@@ -350,6 +372,7 @@ async def evolution_webhook(event: str, request: Request):
                     filename="audio.ogg",
                     mime_type=message.get("mimetype") or "audio/ogg",
                 )
+
 
         elif msg_type == "image":
             url = message.get("url")
