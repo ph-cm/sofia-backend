@@ -204,19 +204,22 @@ class EvolutionService:
         routes = [
             f"/chat/getBase64FromMediaMessage/{instance_name}",
             f"/api/chat/getBase64FromMediaMessage/{instance_name}",
-            f"/message/getBase64FromMediaMessage/{instance_name}",
-            f"/api/message/getBase64FromMediaMessage/{instance_name}",
+            f"/message/downloadMedia/{instance_name}",
+            f"/api/message/downloadMedia/{instance_name}",
         ]
 
         last_error = None
         for route in routes:
             try:
-                return svc._post(route, payload)
+                return svc._post(route, payload, timeout=60)
             except FileNotFoundError as e:
                 last_error = e
                 continue
 
-        raise last_error or RuntimeError("Nenhuma rota de mídia da Evolution funcionou")
+        if last_error:
+            raise last_error
+
+        raise RuntimeError("Nenhuma rota de download de mídia da Evolution respondeu")
 
     @staticmethod
     def get_instance_qrcode(instance_name: str):
