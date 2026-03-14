@@ -5,6 +5,7 @@ import mimetypes
 import tempfile
 import subprocess
 import requests
+
 from typing import Any, Dict, Optional, List
 
 
@@ -359,6 +360,10 @@ class ChatwootService:
         media_type: Optional[str] = None,
         filename: Optional[str] = None,
     ) -> Dict[str, Any]:
+        """
+        Baixa a mídia e reenvi a para o Chatwoot como attachment real.
+        Para áudio, converte para MP3 real para manter compatibilidade com o fluxo atual do n8n.
+        """
         path = f"/api/v1/accounts/{self.account_id}/conversations/{conversation_id}/messages"
         url = self._url(path)
 
@@ -375,8 +380,7 @@ class ChatwootService:
             response_content_type=response_content_type,
         )
 
-        # ADAPTAÇÃO PARA O TEU FLUXO DO N8N:
-        # se for áudio, converte para mp3 real antes de subir no Chatwoot
+        # Se for áudio, converte para mp3 real
         if (media_type or "").lower() == "audio":
             raw_bytes = self._convert_audio_bytes_to_mp3(raw_bytes)
             safe_filename = filename or "audio.mp3"

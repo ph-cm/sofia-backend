@@ -319,7 +319,7 @@ async def evolution_webhook(event: str, request: Request):
                     content="🎤 Áudio recebido",
                     message_type="incoming",
                     media_type="audio",
-                    filename="audio.ogg",
+                    filename="audio.mp3",
                 )
             else:
                 created = cw.create_message(
@@ -327,6 +327,7 @@ async def evolution_webhook(event: str, request: Request):
                     content="🎤 Áudio recebido",
                     message_type="incoming",
                 )
+
 
 
         elif msg_type == "image":
