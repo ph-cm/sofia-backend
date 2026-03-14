@@ -102,7 +102,47 @@ def extract_push_name(payload: Dict[str, Any]) -> Optional[str]:
 
 def extract_message(payload: Dict[str, Any]) -> Dict[str, Any]:
     data = payload.get("data", {})
-    msg = data.get("message", {}) if isinstance(data, dict) else {}
+    root_msg = data.get("message", {}) if isinstance(data, dict) else {}
+
+    def unwrap_message_container(msg: Dict[str, Any]) -> Dict[str, Any]:
+        current = msg
+
+        while isinstance(current, dict):
+            if "ephemeralMessage" in current and isinstance(current["ephemeralMessage"], dict):
+                inner = current["ephemeralMessage"].get("message")
+                if isinstance(inner, dict):
+                    current = inner
+                    continue
+
+            if "viewOnceMessage" in current and isinstance(current["viewOnceMessage"], dict):
+                inner = current["viewOnceMessage"].get("message")
+                if isinstance(inner, dict):
+                    current = inner
+                    continue
+
+            if "viewOnceMessageV2" in current and isinstance(current["viewOnceMessageV2"], dict):
+                inner = current["viewOnceMessageV2"].get("message")
+                if isinstance(inner, dict):
+                    current = inner
+                    continue
+
+            if "viewOnceMessageV2Extension" in current and isinstance(current["viewOnceMessageV2Extension"], dict):
+                inner = current["viewOnceMessageV2Extension"].get("message")
+                if isinstance(inner, dict):
+                    current = inner
+                    continue
+
+            if "documentWithCaptionMessage" in current and isinstance(current["documentWithCaptionMessage"], dict):
+                inner = current["documentWithCaptionMessage"].get("message")
+                if isinstance(inner, dict):
+                    current = inner
+                    continue
+
+            break
+
+        return current if isinstance(current, dict) else {}
+
+    msg = unwrap_message_container(root_msg)
 
     if not isinstance(msg, dict):
         return {"type": "unknown"}
@@ -127,7 +167,6 @@ def extract_message(payload: Dict[str, Any]) -> Dict[str, Any]:
             "ptt": bool(audio.get("ptt", False)),
             "file_sha256": audio.get("fileSha256"),
             "raw_media_message": msg,
-            "raw_event_data": data,
         }
 
     image = msg.get("imageMessage")
@@ -138,6 +177,7 @@ def extract_message(payload: Dict[str, Any]) -> Dict[str, Any]:
             "caption": image.get("caption"),
             "mimetype": image.get("mimetype"),
             "file_sha256": image.get("fileSha256"),
+            "raw_media_message": msg,
         }
 
     doc = msg.get("documentMessage")
@@ -148,6 +188,7 @@ def extract_message(payload: Dict[str, Any]) -> Dict[str, Any]:
             "fileName": doc.get("fileName"),
             "mimetype": doc.get("mimetype"),
             "file_sha256": doc.get("fileSha256"),
+            "raw_media_message": msg,
         }
 
     return {"type": "unknown"}
