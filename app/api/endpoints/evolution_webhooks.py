@@ -312,12 +312,22 @@ async def evolution_webhook(event: str, request: Request):
 
         elif msg_type == "audio":
             url = message.get("url")
-            created = cw.create_message(
-                conversation_id=int(conv_id),
-                content="🎤 Áudio recebido",
-                message_type="incoming",
-                attachments=[{"file_type": "audio", "external_url": url}] if url else None,
-            )
+            if url:
+                created = cw.create_message_with_media(
+                    conversation_id=int(conv_id),
+                    media_url=url,
+                    content="🎤 Áudio recebido",
+                    message_type="incoming",
+                    media_type="audio",
+                    filename="audio.ogg",
+                )
+            else:
+                created = cw.create_message(
+                    conversation_id=int(conv_id),
+                    content="🎤 Áudio recebido",
+                    message_type="incoming",
+                )
+
 
         elif msg_type == "image":
             url = message.get("url")
