@@ -88,6 +88,43 @@ def extract_recipient_phone(payload: Dict[str, Any]) -> Optional[str]:
     return None
 
 
+# def extract_text_or_audio(payload: Dict[str, Any]) -> Dict[str, Any]:
+#     """
+#     Normaliza conteúdo outgoing:
+#       {"kind": "text", "text": "..."}
+#       {"kind": "audio", "url": "...", "ptt": False}
+#     """
+#     msg = payload.get("message") if isinstance(payload.get("message"), dict) else payload
+
+#     content = msg.get("content")
+#     if isinstance(content, str) and content.strip():
+#         return {"kind": "text", "text": content.strip()}
+
+#     # attachments (áudio)
+#     attachments = msg.get("attachments")
+#     if isinstance(attachments, list) and attachments:
+#         # pega o primeiro áudio que achar
+#         for att in attachments:
+#             if not isinstance(att, dict):
+#                 continue
+
+#             file_type = att.get("file_type") or att.get("fileType")
+#             # chatwoot costuma usar file_type: "audio" | "image" | "file"
+#             if isinstance(file_type, str) and file_type.lower() == "audio":
+#                 # pode vir em vários campos dependendo da versão
+#                 url = (
+#                     att.get("data_url")
+#                     or att.get("file_url")
+#                     or att.get("url")
+#                     or att.get("external_url")
+#                 )
+#                 if isinstance(url, str) and url.strip():
+#                     return {"kind": "audio", "url": url.strip(), "ptt": False}
+
+#         # se não achou áudio, mas existe attachment: cai como "unknown_attachment"
+#         return {"kind": "unknown_attachment", "count": len(attachments)}
+
+#     return {"kind": "empty"}
 def extract_text_or_audio(payload: Dict[str, Any]) -> Dict[str, Any]:
     """
     Normaliza conteúdo outgoing:
@@ -96,36 +133,55 @@ def extract_text_or_audio(payload: Dict[str, Any]) -> Dict[str, Any]:
     """
     msg = payload.get("message") if isinstance(payload.get("message"), dict) else payload
 
-    content = msg.get("content")
-    if isinstance(content, str) and content.strip():
-        return {"kind": "text", "text": content.strip()}
-
-    # attachments (áudio)
     attachments = msg.get("attachments")
     if isinstance(attachments, list) and attachments:
-        # pega o primeiro áudio que achar
         for att in attachments:
             if not isinstance(att, dict):
                 continue
 
-            file_type = att.get("file_type") or att.get("fileType")
-            # chatwoot costuma usar file_type: "audio" | "image" | "file"
-            if isinstance(file_type, str) and file_type.lower() == "audio":
-                # pode vir em vários campos dependendo da versão
-                url = (
-                    att.get("data_url")
-                    or att.get("file_url")
-                    or att.get("url")
-                    or att.get("external_url")
-                )
-                if isinstance(url, str) and url.strip():
-                    return {"kind": "audio", "url": url.strip(), "ptt": False}
+            file_type = str(att.get("file_type") or att.get("fileType") or "").lower().strip()
+            data_url = (
+                att.get("data_url")
+                or att.get("file_url")
+                or att.get("url")
+                or att.get("external_url")
+                or ""
+            )
+            mime_type = str(
+                att.get("mime_type")
+                or att.get("content_type")
+                or att.get("file_content_type")
+                or ""
+            ).lower().strip()
+            extension = str(att.get("extension") or "").lower().strip()
 
-        # se não achou áudio, mas existe attachment: cai como "unknown_attachment"
+            url_lower = str(data_url).lower()
+
+            is_audio = (
+                file_type == "audio"
+                or mime_type.startswith("audio/")
+                or extension in {"ogg", "opus", "mp3", "wav", "m4a", "aac"}
+                or ".ogg" in url_lower
+                or ".opus" in url_lower
+                or ".mp3" in url_lower
+                or ".wav" in url_lower
+                or ".m4a" in url_lower
+            )
+
+            if is_audio and data_url:
+                return {
+                    "kind": "audio",
+                    "url": data_url.strip(),
+                    "ptt": False,
+                }
+
         return {"kind": "unknown_attachment", "count": len(attachments)}
 
-    return {"kind": "empty"}
+    content = msg.get("content")
+    if isinstance(content, str) and content.strip():
+        return {"kind": "text", "text": content.strip()}
 
+    return {"kind": "empty"}
 
 @router.post("/events")
 async def chatwoot_events(request: Request, secret: str):
@@ -196,3 +252,4 @@ async def chatwoot_events(request: Request, secret: str):
         log_err("exception", {"error": repr(e)})
         # não retorna 500 pra evitar retry infinito
         return {"ok": True, "ignored": "exception", "error": str(e)}
+    
