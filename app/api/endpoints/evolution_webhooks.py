@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import json
 from fastapi import APIRouter, Request
 from typing import Any, Dict, Optional
 
@@ -358,6 +359,7 @@ async def evolution_webhook(event: str, request: Request):
                 message_type="incoming"
             )
 
+                
         elif msg_type == "audio":
             raw_media_message = message.get("raw_media_message")
 
@@ -391,36 +393,29 @@ async def evolution_webhook(event: str, request: Request):
 
             audio_bytes = base64.b64decode(possible_base64)
 
-            result = cw.create_audio_message_and_forward_to_n8n(
+            safe_mime = (message.get("mimetype") or "audio/ogg").split(";")[0].strip()
+
+            normalized_content = json.dumps(
+                {
+                    "kind": "audio",
+                    "mime_type": safe_mime,
+                    "filename": "audio.ogg",
+                    "audio_base64": possible_base64,
+                    "seconds": message.get("seconds"),
+                    "ptt": message.get("ptt"),
+                },
+                ensure_ascii=False,
+            )
+
+            created = cw.create_message_with_media_bytes(
                 conversation_id=int(conv_id),
                 file_bytes=audio_bytes,
-                instance_name=instance_name,
-                tenant=tenant,
-                phone=phone,
-                push_name=push_name,
-                remote_jid=remote_jid,
-                whatsapp_message_id=dedup_key,
-                mime_type=message.get("mimetype") or "audio/ogg",
-                seconds=message.get("seconds"),
-                ptt=message.get("ptt"),
-                filename="audio.ogg",
-                content="",
+                content=normalized_content,
                 message_type="incoming",
-                audio_base64=possible_base64,
+                media_type="audio",
+                filename="audio.ogg",
+                mime_type=safe_mime,
             )
-
-            created = result["chatwoot_message"]
-
-            log_info(
-                instance_name,
-                "n8n_audio_forwarded",
-                {
-                    "conversation_id": conv_id,
-                    "message_id": dedup_key,
-                    "n8n_response": result.get("n8n_response"),
-                },
-            )
-
 
         elif msg_type == "image":
             url = message.get("url")
