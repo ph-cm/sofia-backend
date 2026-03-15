@@ -584,7 +584,7 @@ class ChatwootService:
             data["content"] = content.strip()
 
         if is_recorded_audio:
-            data["is_recorded_audio"] = "true"
+            data["is_recorded_audio"] = f'["{safe_filename}"]'
 
         print("CHATWOOT_MULTIPART_DATA:", data)
 
