@@ -414,6 +414,7 @@ async def evolution_webhook(event: str, request: Request):
                 media_type="audio",
                 filename="audio.ogg",
                 mime_type=safe_mime,
+                is_recorded_audio=True,
             )
 
         elif msg_type == "image":

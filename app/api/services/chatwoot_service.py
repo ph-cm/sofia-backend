@@ -486,6 +486,7 @@ class ChatwootService:
         media_type: Optional[str] = None,
         filename: Optional[str] = None,
         mime_type: Optional[str] = None,
+        is_recorded_audio: bool = False,
     ) -> Dict[str, Any]:
         path = f"/api/v1/accounts/{self.account_id}/conversations/{conversation_id}/messages"
         url = self._url(path)
@@ -516,6 +517,8 @@ class ChatwootService:
         if isinstance(content, str) and content.strip():
             data["content"] = content.strip()
 
+        if is_recorded_audio:
+            data["is_recorded_audio"] = "true"
         r = requests.post(
             url,
             data=data,
