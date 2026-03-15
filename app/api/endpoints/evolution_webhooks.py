@@ -362,48 +362,64 @@ async def evolution_webhook(event: str, request: Request):
             raw_media_message = message.get("raw_media_message")
 
             if not raw_media_message:
-                created = cw.create_message(
-                    conversation_id=int(conv_id),
-                    content="🎤 Áudio recebido",
-                    message_type="incoming",
-                )
-            else:
-                evo_media = EvolutionService.download_media_base64(
-                    instance_name=instance_name,
-                    message=raw_media_message,
-                )
+                raise RuntimeError("Áudio recebido sem raw_media_message")
 
+            evo_media = EvolutionService.download_media_base64(
+                instance_name=instance_name,
+                message=raw_media_message,
+            )
+
+            possible_base64 = (
+                evo_media.get("base64")
+                or evo_media.get("data")
+                or evo_media.get("media")
+                or evo_media.get("file")
+                or evo_media.get("buffer")
+            )
+
+            if isinstance(possible_base64, dict):
                 possible_base64 = (
-                    evo_media.get("base64")
-                    or evo_media.get("data")
-                    or evo_media.get("media")
-                    or evo_media.get("file")
-                    or evo_media.get("buffer")
+                    possible_base64.get("base64")
+                    or possible_base64.get("data")
                 )
 
-                if isinstance(possible_base64, dict):
-                    possible_base64 = (
-                        possible_base64.get("base64")
-                        or possible_base64.get("data")
-                    )
+            if not possible_base64 or not isinstance(possible_base64, str):
+                raise RuntimeError(f"Evolution não retornou base64 do áudio: {evo_media}")
 
-                if not possible_base64 or not isinstance(possible_base64, str):
-                    raise RuntimeError(f"Evolution não retornou base64 do áudio: {evo_media}")
+            if possible_base64.startswith("data:") and "," in possible_base64:
+                possible_base64 = possible_base64.split(",", 1)[1]
 
-                if possible_base64.startswith("data:") and "," in possible_base64:
-                    possible_base64 = possible_base64.split(",", 1)[1]
+            audio_bytes = base64.b64decode(possible_base64)
 
-                audio_bytes = base64.b64decode(possible_base64)
+            result = cw.create_audio_message_and_forward_to_n8n(
+                conversation_id=int(conv_id),
+                file_bytes=audio_bytes,
+                instance_name=instance_name,
+                tenant=tenant,
+                phone=phone,
+                push_name=push_name,
+                remote_jid=remote_jid,
+                whatsapp_message_id=dedup_key,
+                mime_type=message.get("mimetype") or "audio/ogg",
+                seconds=message.get("seconds"),
+                ptt=message.get("ptt"),
+                filename="audio.ogg",
+                content="",
+                message_type="incoming",
+                audio_base64=possible_base64,
+            )
 
-                created = cw.create_message_with_media_bytes(
-                    conversation_id=int(conv_id),
-                    file_bytes=audio_bytes,
-                    content="🎤 Áudio recebido",
-                    message_type="incoming",
-                    media_type="audio",
-                    filename="audio.ogg",
-                    mime_type=message.get("mimetype") or "audio/ogg",
-                )
+            created = result["chatwoot_message"]
+
+            log_info(
+                instance_name,
+                "n8n_audio_forwarded",
+                {
+                    "conversation_id": conv_id,
+                    "message_id": dedup_key,
+                    "n8n_response": result.get("n8n_response"),
+                },
+            )
 
 
         elif msg_type == "image":

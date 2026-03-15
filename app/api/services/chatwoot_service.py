@@ -5,7 +5,7 @@ import requests
 
 from typing import Any, Dict, Optional, List
 
-
+import os
 class ChatwootService:
     def __init__(self, base_url: str, api_token: str, account_id: int):
         self.base_url = base_url.rstrip("/")
@@ -43,6 +43,163 @@ class ChatwootService:
             return data["payload"]
         return data
 
+    @staticmethod
+    def _extract_first_attachment(obj: Any) -> Dict[str, Any]:
+        if not isinstance(obj, dict):
+            return {}
+
+        attachments = obj.get("attachments")
+        if isinstance(attachments, list) and attachments:
+            first = attachments[0]
+            if isinstance(first, dict):
+                return first
+
+        payload = obj.get("payload")
+        if payload is not None:
+            inner = ChatwootService._extract_first_attachment(payload)
+            if inner:
+                return inner
+
+        message = obj.get("message")
+        if message is not None:
+            inner = ChatwootService._extract_first_attachment(message)
+            if inner:
+                return inner
+
+        data = obj.get("data")
+        if data is not None:
+            inner = ChatwootService._extract_first_attachment(data)
+            if inner:
+                return inner
+
+        return {}
+
+    @classmethod
+    def extract_attachment_url(cls, obj: Any) -> Optional[str]:
+        first = cls._extract_first_attachment(obj)
+        v = first.get("data_url")
+        return v.strip() if isinstance(v, str) and v.strip() else None
+
+    @classmethod
+    def extract_attachment_meta(cls, obj: Any) -> Dict[str, Any]:
+        first = cls._extract_first_attachment(obj)
+        if not first:
+            return {}
+
+        return {
+            "id": first.get("id"),
+            "file_type": first.get("file_type"),
+            "data_url": first.get("data_url"),
+            "thumb_url": first.get("thumb_url"),
+            "file_size": first.get("file_size"),
+            "extension": first.get("extension"),
+            "width": first.get("width"),
+            "height": first.get("height"),
+            "meta": first.get("meta"),
+        }
+
+    @staticmethod
+    def _n8n_headers() -> Dict[str, str]:
+        headers = {"Content-Type": "application/json"}
+
+        token = os.getenv("N8N_AUDIO_WEBHOOK_TOKEN")
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+
+        return headers
+
+    @staticmethod
+    def send_audio_to_n8n(payload: Dict[str, Any]) -> Dict[str, Any]:
+        webhook_url = os.getenv("N8N_AUDIO_WEBHOOK_URL")
+        if not webhook_url:
+            raise RuntimeError("N8N_AUDIO_WEBHOOK_URL não configurada")
+
+        r = requests.post(
+            webhook_url,
+            json=payload,
+            headers=ChatwootService._n8n_headers(),
+            timeout=60,
+        )
+
+        if r.status_code >= 300:
+            raise RuntimeError(f"N8N audio webhook failed: {r.status_code} {r.text}")
+
+        try:
+            return r.json()
+        except Exception:
+            return {"status_code": r.status_code, "text": r.text}
+
+    def create_audio_message_and_forward_to_n8n(
+        self,
+        conversation_id: int,
+        file_bytes: bytes,
+        *,
+        instance_name: str,
+        tenant: Dict[str, Any],
+        phone: str,
+        push_name: Optional[str],
+        remote_jid: Optional[str],
+        whatsapp_message_id: Optional[str],
+        mime_type: Optional[str] = None,
+        seconds: Optional[int] = None,
+        ptt: Optional[bool] = None,
+        filename: str = "audio.ogg",
+        content: str = "",
+        message_type: str = "incoming",
+        audio_base64: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        created = self.create_message_with_media_bytes(
+            conversation_id=conversation_id,
+            file_bytes=file_bytes,
+            content=content,
+            message_type=message_type,
+            media_type="audio",
+            filename=filename,
+            mime_type=mime_type or "audio/ogg",
+        )
+
+        attachment_url = self.extract_attachment_url(created)
+        attachment_meta = self.extract_attachment_meta(created)
+        chatwoot_message_id = self._extract_id(created)
+
+        n8n_payload = {
+            "event": "incoming_audio",
+            "instance_name": instance_name,
+            "tenant_id": tenant.get("id") or tenant.get("tenant_id"),
+            "chatwoot_account_id": tenant.get("chatwoot_account_id"),
+            "chatwoot_inbox_id": tenant.get("chatwoot_inbox_id"),
+            "chatwoot_conversation_id": int(conversation_id),
+            "chatwoot_message_id": chatwoot_message_id,
+            "phone": phone,
+            "push_name": push_name,
+            "remote_jid": remote_jid,
+            "message_id": whatsapp_message_id,
+            "mime_type": mime_type or "audio/ogg",
+            "seconds": seconds,
+            "ptt": ptt,
+            "audio_url": attachment_url,
+            "audio_base64": audio_base64,
+            "attachment": attachment_meta,
+        }
+
+        n8n_response = self.send_audio_to_n8n(n8n_payload)
+
+        print(
+            "CHATWOOT_AUDIO_FORWARDED_TO_N8N:",
+            {
+                "conversation_id": conversation_id,
+                "chatwoot_message_id": chatwoot_message_id,
+                "audio_url": attachment_url,
+                "has_audio_base64": bool(audio_base64),
+            },
+        )
+
+        return {
+            "chatwoot_message": created,
+            "n8n_payload": n8n_payload,
+            "n8n_response": n8n_response,
+        }
+        
     @staticmethod
     def _unwrap_contact(data: Any) -> Any:
         data = ChatwootService._unwrap_payload(data)
