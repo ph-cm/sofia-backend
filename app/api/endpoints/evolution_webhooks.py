@@ -410,7 +410,6 @@ async def evolution_webhook(event: str, request: Request):
             created = cw.create_message_with_media_bytes(
                 conversation_id=int(conv_id),
                 file_bytes=audio_bytes,
-                content=normalized_content,
                 message_type="incoming",
                 media_type="audio",
                 filename="audio.ogg",
