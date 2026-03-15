@@ -542,3 +542,73 @@ class ChatwootService:
             },
         )
         return data_resp if isinstance(data_resp, dict) else {"raw": data_resp}
+    
+    def create_message_with_media_bytes(
+        self,
+        conversation_id: int,
+        file_bytes: bytes,
+        content: str = "",
+        message_type: str = "incoming",
+        media_type: Optional[str] = None,
+        filename: Optional[str] = None,
+        mime_type: Optional[str] = None,
+        is_recorded_audio: bool = False,
+    ) -> Dict[str, Any]:
+        path = f"/api/v1/accounts/{self.account_id}/conversations/{conversation_id}/messages"
+        url = self._url(path)
+
+        safe_filename, safe_mime = self._guess_filename_and_mime(
+            media_url=filename or "file.bin",
+            media_type=media_type,
+            fallback_filename=filename,
+            response_content_type=mime_type,
+        )
+
+        if (media_type or "").lower() == "audio":
+            safe_filename = filename or "audio.ogg"
+            safe_mime = (mime_type or "audio/ogg").split(";")[0].strip()
+
+        files = {
+            "attachments[]": (
+                safe_filename,
+                file_bytes,
+                safe_mime,
+            )
+        }
+
+        data = {
+            "message_type": message_type,
+        }
+
+        if isinstance(content, str) and content.strip():
+            data["content"] = content.strip()
+
+        if is_recorded_audio:
+            data["is_recorded_audio"] = "true"
+
+        print("CHATWOOT_MULTIPART_DATA:", data)
+
+        r = requests.post(
+            url,
+            data=data,
+            files=files,
+            headers=self._headers_multipart(),
+            timeout=60,
+        )
+        self._raise(r, "Chatwoot create_message_with_media_bytes failed")
+        data_resp = r.json()
+        self._log_http("POST", path, r, data_resp)
+
+        print(
+            "CHATWOOT_MESSAGE_MEDIA_BYTES_CREATED:",
+            {
+                "id": self._extract_id(data_resp),
+                "conversation_id": conversation_id,
+                "type": message_type,
+                "filename": safe_filename,
+                "mime_type": safe_mime,
+                "media_type": media_type,
+                "is_recorded_audio": is_recorded_audio,
+            },
+        )
+        return data_resp if isinstance(data_resp, dict) else {"raw": data_resp}
