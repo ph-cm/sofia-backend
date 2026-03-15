@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-import os
 import mimetypes
-import tempfile
-import subprocess
 import requests
 
 from typing import Any, Dict, Optional, List
@@ -113,11 +110,23 @@ class ChatwootService:
         mt = (media_type or "").lower().strip()
 
         if mt == "audio":
-            return (fallback_filename or "audio.mp3", "audio/mpeg")
+            return (
+                fallback_filename or "audio.ogg",
+                response_content_type or "audio/ogg",
+            )
+
         if mt == "image":
-            return (fallback_filename or "image.jpg", response_content_type or "image/jpeg")
+            return (
+                fallback_filename or "image.jpg",
+                response_content_type or "image/jpeg",
+            )
+
         if mt == "video":
-            return (fallback_filename or "video.mp4", response_content_type or "video/mp4")
+            return (
+                fallback_filename or "video.mp4",
+                response_content_type or "video/mp4",
+            )
+
         if mt == "document":
             guessed = mimetypes.guess_type(fallback_filename or "")[0]
             return (
@@ -134,46 +143,6 @@ class ChatwootService:
             fallback_filename or "file.bin",
             response_content_type or guessed or "application/octet-stream",
         )
-
-    @staticmethod
-    def _convert_audio_bytes_to_mp3(input_bytes: bytes) -> bytes:
-        """
-        Converte áudio OGG/OPUS para MP3 usando ffmpeg.
-        Requer ffmpeg instalado no container/servidor.
-        """
-        with tempfile.TemporaryDirectory() as tmpdir:
-            in_path = os.path.join(tmpdir, "input.ogg")
-            out_path = os.path.join(tmpdir, "output.mp3")
-
-            with open(in_path, "wb") as f:
-                f.write(input_bytes)
-
-            cmd = [
-                "ffmpeg",
-                "-y",
-                "-i", in_path,
-                "-vn",
-                "-acodec", "libmp3lame",
-                "-ar", "44100",
-                "-ac", "1",
-                "-b:a", "128k",
-                out_path,
-            ]
-
-            result = subprocess.run(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                check=False,
-            )
-
-            if result.returncode != 0:
-                raise RuntimeError(
-                    f"Falha ao converter áudio para mp3 via ffmpeg: {result.stderr.decode(errors='ignore')}"
-                )
-
-            with open(out_path, "rb") as f:
-                return f.read()
 
     def create_api_inbox(
         self,
@@ -350,7 +319,7 @@ class ChatwootService:
             {"id": self._extract_id(data), "conversation_id": conversation_id, "type": message_type},
         )
         return data if isinstance(data, dict) else {"raw": data}
-    
+
     def create_message_with_media_bytes(
         self,
         conversation_id: int,
@@ -419,10 +388,6 @@ class ChatwootService:
         media_type: Optional[str] = None,
         filename: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """
-        Baixa a mídia e reenvi a para o Chatwoot como attachment real.
-        Para áudio, converte para MP3 real para manter compatibilidade com o fluxo atual do n8n.
-        """
         path = f"/api/v1/accounts/{self.account_id}/conversations/{conversation_id}/messages"
         url = self._url(path)
 
@@ -439,12 +404,6 @@ class ChatwootService:
             response_content_type=response_content_type,
         )
 
-        # Se for áudio, converte para mp3 real
-        if (media_type or "").lower() == "audio":
-            raw_bytes = self._convert_audio_bytes_to_mp3(raw_bytes)
-            safe_filename = filename or "audio.mp3"
-            safe_mime = "audio/mpeg"
-
         files = {
             "attachments[]": (
                 safe_filename,
@@ -454,9 +413,11 @@ class ChatwootService:
         }
 
         data = {
-            "content": content,
             "message_type": message_type,
         }
+
+        if isinstance(content, str) and content.strip():
+            data["content"] = content.strip()
 
         r = requests.post(
             url,
