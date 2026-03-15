@@ -101,7 +101,11 @@ def extract_push_name(payload: Dict[str, Any]) -> Optional[str]:
 
 def extract_message(payload: Dict[str, Any]) -> Dict[str, Any]:
     data = payload.get("data", {})
-    root_msg = data.get("message", {}) if isinstance(data, dict) else {}
+    if not isinstance(data, dict):
+        return {"type": "unknown"}
+
+    key = data.get("key", {})
+    root_msg = data.get("message", {})
 
     def unwrap_message_container(msg: Dict[str, Any]) -> Dict[str, Any]:
         current = msg
@@ -165,7 +169,10 @@ def extract_message(payload: Dict[str, Any]) -> Dict[str, Any]:
             "seconds": audio.get("seconds"),
             "ptt": bool(audio.get("ptt", False)),
             "file_sha256": audio.get("fileSha256"),
-            "raw_media_message": msg,
+            "raw_media_message": {
+                "key": key,
+                "message": root_msg,  # importante: root completo, não o msg unwrapado
+            },
         }
 
     image = msg.get("imageMessage")
@@ -176,7 +183,10 @@ def extract_message(payload: Dict[str, Any]) -> Dict[str, Any]:
             "caption": image.get("caption"),
             "mimetype": image.get("mimetype"),
             "file_sha256": image.get("fileSha256"),
-            "raw_media_message": msg,
+            "raw_media_message": {
+                "key": key,
+                "message": root_msg,
+            },
         }
 
     doc = msg.get("documentMessage")
@@ -187,7 +197,10 @@ def extract_message(payload: Dict[str, Any]) -> Dict[str, Any]:
             "fileName": doc.get("fileName"),
             "mimetype": doc.get("mimetype"),
             "file_sha256": doc.get("fileSha256"),
-            "raw_media_message": msg,
+            "raw_media_message": {
+                "key": key,
+                "message": root_msg,
+            },
         }
 
     return {"type": "unknown"}
@@ -346,51 +359,51 @@ async def evolution_webhook(event: str, request: Request):
             )
 
         elif msg_type == "audio":
-                raw_media_message = message.get("raw_media_message")
+            raw_media_message = message.get("raw_media_message")
 
-                if not raw_media_message:
-                    created = cw.create_message(
-                        conversation_id=int(conv_id),
-                        content="",
-                        message_type="incoming",
-                    )
-                else:
-                    evo_media = EvolutionService.download_media_base64(
-                        instance_name=instance_name,
-                        message=raw_media_message,
-                    )
+            if not raw_media_message:
+                created = cw.create_message(
+                    conversation_id=int(conv_id),
+                    content="🎤 Áudio recebido",
+                    message_type="incoming",
+                )
+            else:
+                evo_media = EvolutionService.download_media_base64(
+                    instance_name=instance_name,
+                    message=raw_media_message,
+                )
 
+                possible_base64 = (
+                    evo_media.get("base64")
+                    or evo_media.get("data")
+                    or evo_media.get("media")
+                    or evo_media.get("file")
+                    or evo_media.get("buffer")
+                )
+
+                if isinstance(possible_base64, dict):
                     possible_base64 = (
-                        evo_media.get("base64")
-                        or evo_media.get("data")
-                        or evo_media.get("media")
-                        or evo_media.get("file")
-                        or evo_media.get("buffer")
+                        possible_base64.get("base64")
+                        or possible_base64.get("data")
                     )
 
-                    if isinstance(possible_base64, dict):
-                        possible_base64 = (
-                            possible_base64.get("base64")
-                            or possible_base64.get("data")
-                        )
+                if not possible_base64 or not isinstance(possible_base64, str):
+                    raise RuntimeError(f"Evolution não retornou base64 do áudio: {evo_media}")
 
-                    if not possible_base64 or not isinstance(possible_base64, str):
-                        raise RuntimeError(f"Evolution não retornou base64 do áudio: {evo_media}")
+                if possible_base64.startswith("data:") and "," in possible_base64:
+                    possible_base64 = possible_base64.split(",", 1)[1]
 
-                    if "," in possible_base64 and possible_base64.startswith("data:"):
-                        possible_base64 = possible_base64.split(",", 1)[1]
+                audio_bytes = base64.b64decode(possible_base64)
 
-                    audio_bytes = base64.b64decode(possible_base64)
-
-                    created = cw.create_message_with_media_bytes(
-                        conversation_id=int(conv_id),
-                        file_bytes=audio_bytes,
-                        content="",
-                        message_type="incoming",
-                        media_type="audio",
-                        filename="audio.ogg",
-                        mime_type=message.get("mimetype") or "audio/ogg",
-                    )
+                created = cw.create_message_with_media_bytes(
+                    conversation_id=int(conv_id),
+                    file_bytes=audio_bytes,
+                    content="🎤 Áudio recebido",
+                    message_type="incoming",
+                    media_type="audio",
+                    filename="audio.ogg",
+                    mime_type=message.get("mimetype") or "audio/ogg",
+                )
 
 
         elif msg_type == "image":
