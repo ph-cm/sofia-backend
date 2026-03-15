@@ -340,14 +340,9 @@ class ChatwootService:
             response_content_type=mime_type,
         )
 
-        # força MIME correto para áudio
         if (media_type or "").lower() == "audio":
-            if not filename:
-                safe_filename = "audio.ogg"
-            if not mime_type:
-                safe_mime = "audio/ogg"
-            else:
-                safe_mime = mime_type.split(";")[0].strip()
+            safe_filename = filename or "audio.ogg"
+            safe_mime = (mime_type or "audio/ogg").split(";")[0].strip()
 
         files = {
             "attachments[]": (
@@ -388,39 +383,35 @@ class ChatwootService:
         )
         return data_resp if isinstance(data_resp, dict) else {"raw": data_resp}
 
-    def create_message_with_media_bytes(
+    def create_message_with_media(
         self,
         conversation_id: int,
-        file_bytes: bytes,
+        media_url: str,
         content: str = "",
         message_type: str = "incoming",
         media_type: Optional[str] = None,
         filename: Optional[str] = None,
-        mime_type: Optional[str] = None,
     ) -> Dict[str, Any]:
         path = f"/api/v1/accounts/{self.account_id}/conversations/{conversation_id}/messages"
         url = self._url(path)
 
+        media_response = requests.get(media_url, timeout=60)
+        media_response.raise_for_status()
+
+        raw_bytes = media_response.content
+        response_content_type = media_response.headers.get("Content-Type")
+
         safe_filename, safe_mime = self._guess_filename_and_mime(
-            media_url=filename or "file.bin",
+            media_url=media_url,
             media_type=media_type,
             fallback_filename=filename,
-            response_content_type=mime_type,
+            response_content_type=response_content_type,
         )
-
-        # força MIME correto para áudio
-        if (media_type or "").lower() == "audio":
-            if not filename:
-                safe_filename = "audio.ogg"
-            if not mime_type:
-                safe_mime = "audio/ogg"
-            else:
-                safe_mime = mime_type.split(";")[0].strip()
 
         files = {
             "attachments[]": (
                 safe_filename,
-                file_bytes,
+                raw_bytes,
                 safe_mime,
             )
         }
@@ -439,12 +430,12 @@ class ChatwootService:
             headers=self._headers_multipart(),
             timeout=60,
         )
-        self._raise(r, "Chatwoot create_message_with_media_bytes failed")
+        self._raise(r, "Chatwoot create_message_with_media failed")
         data_resp = r.json()
         self._log_http("POST", path, r, data_resp)
 
         print(
-            "CHATWOOT_MESSAGE_MEDIA_BYTES_CREATED:",
+            "CHATWOOT_MESSAGE_MEDIA_CREATED:",
             {
                 "id": self._extract_id(data_resp),
                 "conversation_id": conversation_id,

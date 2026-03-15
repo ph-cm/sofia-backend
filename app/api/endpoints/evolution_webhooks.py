@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-
+import base64
 from fastapi import APIRouter, Request
 from typing import Any, Dict, Optional
 
@@ -346,23 +346,51 @@ async def evolution_webhook(event: str, request: Request):
             )
 
         elif msg_type == "audio":
-            audio_url = message.get("url")
+                raw_media_message = message.get("raw_media_message")
 
-            if audio_url and isinstance(audio_url, str) and audio_url.strip():
-                created = cw.create_message_with_media(
-                    conversation_id=int(conv_id),
-                    media_url=audio_url.strip(),
-                    content="",  # sem texto fixo
-                    message_type="incoming",
-                    media_type="audio",
-                    filename="audio.ogg",
-                )
-            else:
-                created = cw.create_message(
-                    conversation_id=int(conv_id),
-                    content="",
-                    message_type="incoming",
-                )
+                if not raw_media_message:
+                    created = cw.create_message(
+                        conversation_id=int(conv_id),
+                        content="",
+                        message_type="incoming",
+                    )
+                else:
+                    evo_media = EvolutionService.download_media_base64(
+                        instance_name=instance_name,
+                        message=raw_media_message,
+                    )
+
+                    possible_base64 = (
+                        evo_media.get("base64")
+                        or evo_media.get("data")
+                        or evo_media.get("media")
+                        or evo_media.get("file")
+                        or evo_media.get("buffer")
+                    )
+
+                    if isinstance(possible_base64, dict):
+                        possible_base64 = (
+                            possible_base64.get("base64")
+                            or possible_base64.get("data")
+                        )
+
+                    if not possible_base64 or not isinstance(possible_base64, str):
+                        raise RuntimeError(f"Evolution não retornou base64 do áudio: {evo_media}")
+
+                    if "," in possible_base64 and possible_base64.startswith("data:"):
+                        possible_base64 = possible_base64.split(",", 1)[1]
+
+                    audio_bytes = base64.b64decode(possible_base64)
+
+                    created = cw.create_message_with_media_bytes(
+                        conversation_id=int(conv_id),
+                        file_bytes=audio_bytes,
+                        content="",
+                        message_type="incoming",
+                        media_type="audio",
+                        filename="audio.ogg",
+                        mime_type=message.get("mimetype") or "audio/ogg",
+                    )
 
 
         elif msg_type == "image":
