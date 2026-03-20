@@ -7,13 +7,96 @@ from sqlalchemy.orm import Session
 
 from app.api.models.tenant import Tenant
 from app.api.models.appointment import Appointment
-
+from app.api.services.google_service import GoogleAuthService
 
 class ReminderService:
     DEFAULT_CALENDAR_ID = "primary"
     DEFAULT_CADENCE_HOURS = [24, 12, 1]
     DEFAULT_TIMEZONE = "America/Sao_Paulo"
 
+    @staticmethod
+    def get_google_events(
+        db: Session,
+        *,
+        user_id: int,
+        after: datetime,
+        before: datetime,
+    ) -> List[Dict[str, Any]]:
+        after = ReminderService._normalize_dt(after)
+        before = ReminderService._normalize_dt(before)
+
+        tenant = (
+            db.query(Tenant)
+            .filter(Tenant.user_id == user_id)
+            .first()
+        )
+
+        if not tenant:
+            raise ValueError(f"Tenant não encontrado para user_id={user_id}")
+
+        # AJUSTE os nomes dos campos abaixo conforme seu model real
+        access_token = getattr(tenant, "google_access_token", None)
+        refresh_token = getattr(tenant, "google_refresh_token", None)
+        expires_at = getattr(tenant, "google_token_expires_at", None)
+
+        if not access_token:
+            raise ValueError(f"Tenant user_id={user_id} sem access token Google")
+
+        google_service = GoogleAuthService()
+
+        token_data = google_service.refresh_access_token_if_needed(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            expires_at=expires_at,
+        )
+
+        access_token = token_data["access_token"]
+        new_expires_at = token_data["expires_at"]
+
+        if token_data["refreshed"]:
+            tenant.google_access_token = access_token
+            tenant.google_token_expires_at = new_expires_at
+            db.add(tenant)
+            db.commit()
+            db.refresh(tenant)
+
+        calendar_id = ReminderService.DEFAULT_CALENDAR_ID
+
+        payload = google_service.list_calendar_events(
+            access_token=access_token,
+            calendar_id=calendar_id,
+            time_min=after.isoformat(),
+            time_max=before.isoformat(),
+            max_results=100,
+        )
+
+        items = payload.get("items", [])
+        results: List[Dict[str, Any]] = []
+
+        for item in items:
+            status = item.get("status")
+            if status == "cancelled":
+                continue
+
+            start_raw = item.get("start", {})
+            end_raw = item.get("end", {})
+
+            start_dt = start_raw.get("dateTime") or start_raw.get("date")
+            end_dt = end_raw.get("dateTime") or end_raw.get("date")
+
+            results.append(
+                {
+                    "google_event_id": item.get("id"),
+                    "status": status,
+                    "summary": item.get("summary"),
+                    "description": item.get("description"),
+                    "start_datetime": start_dt,
+                    "end_datetime": end_dt,
+                    "html_link": item.get("htmlLink"),
+                }
+            )
+
+        return results
     @staticmethod
     def get_reminder_targets(db: Session) -> List[Dict[str, Any]]:
         tenants = (

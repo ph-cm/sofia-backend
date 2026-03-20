@@ -15,7 +15,15 @@ from app.api.models.appointment import Appointment
 
 router = APIRouter(prefix="/reminders", tags=["Reminders"])
 
-
+class GoogleEventResponse(BaseModel):
+    google_event_id: Optional[str] = None
+    status: Optional[str] = None
+    summary: Optional[str] = None
+    description: Optional[str] = None
+    start_datetime: Optional[str] = None
+    end_datetime: Optional[str] = None
+    html_link: Optional[str] = None
+    
 class ReminderTargetResponse(BaseModel):
     tenant_id: int
     user_id: int
@@ -50,6 +58,20 @@ class MarkReminderSentResponse(BaseModel):
     appointment_id: int
     tipo_lembrete: str
     sent_at: str
+    
+@router.get("/google-events", response_model=List[GoogleEventResponse])
+def get_google_events(
+    user_id: int = Query(...),
+    after: datetime = Query(...),
+    before: datetime = Query(...),
+    db: Session = Depends(get_db),
+):
+    return ReminderService.get_google_events(
+        db,
+        user_id=user_id,
+        after=after,
+        before=before,
+    )
     
 @router.get("/debug-appointments-by-user")
 def debug_appointments_by_user(
