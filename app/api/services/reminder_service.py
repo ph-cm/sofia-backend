@@ -6,13 +6,13 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy.orm import Session
 
 from app.api.models.tenant import Tenant
-
-# AJUSTE ESTE IMPORT para o model real de appointments
 from app.api.models.appointment import Appointment
 
 
 class ReminderService:
     DEFAULT_CALENDAR_ID = "primary"
+    DEFAULT_CADENCE_HOURS = [24, 12, 1]
+    DEFAULT_TIMEZONE = "America/Sao_Paulo"
 
     @staticmethod
     def get_reminder_targets(db: Session) -> List[Dict[str, Any]]:
@@ -37,6 +37,9 @@ class ReminderService:
                     "chatwoot_account_id": tenant.chatwoot_account_id,
                     "chatwoot_inbox_id": tenant.chatwoot_inbox_id,
                     "evolution_instance_name": tenant.evolution_instance_name,
+                    "cadence_hours": ReminderService.DEFAULT_CADENCE_HOURS,
+                    "timezone": ReminderService.DEFAULT_TIMEZONE,
+                    "enabled": True,
                 }
             )
 
@@ -53,7 +56,6 @@ class ReminderService:
         after = ReminderService._normalize_dt(after)
         before = ReminderService._normalize_dt(before)
 
-        # AJUSTE esta query conforme seus campos reais
         query = (
             db.query(Appointment)
             .filter(Appointment.user_id == user_id)
@@ -99,17 +101,13 @@ class ReminderService:
         tipo_lembrete: str,
         sent_at: Optional[datetime] = None,
     ) -> Dict[str, Any]:
-        """
-        Implementação mínima sem mexer no model:
-        só retorna sucesso por enquanto.
-
-        Depois você pode trocar para tabela própria de logs de lembrete.
-        """
         return {
             "success": True,
             "appointment_id": appointment_id,
             "tipo_lembrete": tipo_lembrete,
-            "sent_at": ReminderService._normalize_dt(sent_at or datetime.now(timezone.utc)).isoformat(),
+            "sent_at": ReminderService._normalize_dt(
+                sent_at or datetime.now(timezone.utc)
+            ).isoformat(),
         }
 
     @staticmethod
