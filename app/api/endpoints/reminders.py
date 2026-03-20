@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.api.services.reminder_service import ReminderService
+from app.api.models.appointment import Appointment
 
 router = APIRouter(prefix="/reminders", tags=["Reminders"])
 
@@ -47,7 +48,73 @@ class MarkReminderSentResponse(BaseModel):
     appointment_id: int
     tipo_lembrete: str
     sent_at: str
+    
+@router.get("/debug-appointments-by-user")
+def debug_appointments_by_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+) -> List[Dict[str, Any]]:
+    appointments = (
+        db.query(Appointment)
+        .filter(Appointment.user_id == user_id)
+        .limit(20)
+        .all()
+    )
 
+    results = []
+
+    for appt in appointments:
+        results.append(
+            {
+                "id": getattr(appt, "id", None),
+                "user_id": getattr(appt, "user_id", None),
+                "tenant_id": getattr(appt, "tenant_id", None),
+                "status": getattr(appt, "status", None),
+                "start_datetime": str(getattr(appt, "start_datetime", None)),
+                "evento_inicio": str(getattr(appt, "evento_inicio", None)),
+                "starts_at": str(getattr(appt, "starts_at", None)),
+                "patient_name": getattr(appt, "patient_name", None),
+                "nome_paciente": getattr(appt, "nome_paciente", None),
+                "title": getattr(appt, "title", None),
+                "telefone": getattr(appt, "telefone", None),
+                "phone": getattr(appt, "phone", None),
+                "patient_phone": getattr(appt, "patient_phone", None),
+            }
+        )
+
+    return results
+
+@router.get("/debug-appointments")
+def debug_appointments(db: Session = Depends(get_db)) -> List[Dict[str, Any]]:
+    appointments = db.query(Appointment).limit(20).all()
+
+    results = []
+
+    for appt in appointments:
+        results.append(
+            {
+                "id": getattr(appt, "id", None),
+                "user_id": getattr(appt, "user_id", None),
+                "tenant_id": getattr(appt, "tenant_id", None),
+                "status": getattr(appt, "status", None),
+                "start_datetime": str(getattr(appt, "start_datetime", None)),
+                "end_datetime": str(getattr(appt, "end_datetime", None)),
+                "evento_inicio": str(getattr(appt, "evento_inicio", None)),
+                "evento_fim": str(getattr(appt, "evento_fim", None)),
+                "starts_at": str(getattr(appt, "starts_at", None)),
+                "end_at": str(getattr(appt, "end_at", None)),
+                "patient_name": getattr(appt, "patient_name", None),
+                "nome_paciente": getattr(appt, "nome_paciente", None),
+                "title": getattr(appt, "title", None),
+                "telefone": getattr(appt, "telefone", None),
+                "phone": getattr(appt, "phone", None),
+                "patient_phone": getattr(appt, "patient_phone", None),
+                "contact_phone": getattr(appt, "contact_phone", None),
+                "google_event_id": getattr(appt, "google_event_id", None),
+            }
+        )
+
+    return results
 
 @router.get("/targets", response_model=List[ReminderTargetResponse])
 def get_reminder_targets(db: Session = Depends(get_db)):
