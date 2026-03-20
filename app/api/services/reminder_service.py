@@ -56,17 +56,31 @@ class ReminderService:
         after = ReminderService._normalize_dt(after)
         before = ReminderService._normalize_dt(before)
 
-        query = (
+        appointments = (
             db.query(Appointment)
             .filter(Appointment.user_id == user_id)
-            .filter(Appointment.start_datetime >= after)
-            .filter(Appointment.start_datetime <= before)
+            .all()
         )
 
         if hasattr(Appointment, "status"):
-            query = query.filter(Appointment.status != "cancelled")
+            appointments = [
+                appt
+                for appt in appointments
+                if getattr(appt, "status", None) != "cancelled"
+            ]
 
-        appointments = query.order_by(Appointment.start_datetime.asc()).all()
+        filtered_appointments: List[Appointment] = []
+
+        for appt in appointments:
+            start_dt = ReminderService._extract_start_datetime(appt)
+
+            if after <= start_dt <= before:
+                filtered_appointments.append(appt)
+
+        appointments = sorted(
+            filtered_appointments,
+            key=lambda x: ReminderService._extract_start_datetime(x),
+        )
 
         results: List[Dict[str, Any]] = []
 
