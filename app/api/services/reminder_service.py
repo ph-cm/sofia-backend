@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 from app.api.models.tenant import Tenant
 from app.api.models.appointment import Appointment
 from app.api.services.google_service import GoogleAuthService
+from app.api.models.google_token import GoogleToken
+from app.api.services.google_service import GoogleAuthService
 
 class ReminderService:
     DEFAULT_CALENDAR_ID = "primary"
@@ -34,13 +36,21 @@ class ReminderService:
         if not tenant:
             raise ValueError(f"Tenant não encontrado para user_id={user_id}")
 
-        # AJUSTE os nomes dos campos abaixo conforme seu model real
-        access_token = getattr(tenant, "google_access_token", None)
-        refresh_token = getattr(tenant, "google_refresh_token", None)
-        expires_at = getattr(tenant, "google_token_expires_at", None)
+        google_token = (
+            db.query(GoogleToken)
+            .filter(GoogleToken.user_id == user_id)
+            .first()
+        )
+
+        if not google_token:
+            raise ValueError(f"GoogleToken não encontrado para user_id={user_id}")
+
+        access_token = google_token.google_access_token
+        refresh_token = google_token.google_refresh_token
+        expires_at = google_token.google_token_expiry
 
         if not access_token:
-            raise ValueError(f"Tenant user_id={user_id} sem access token Google")
+            raise ValueError(f"user_id={user_id} sem access token Google")
 
         google_service = GoogleAuthService()
 
@@ -54,11 +64,11 @@ class ReminderService:
         new_expires_at = token_data["expires_at"]
 
         if token_data["refreshed"]:
-            tenant.google_access_token = access_token
-            tenant.google_token_expires_at = new_expires_at
-            db.add(tenant)
+            google_token.google_access_token = access_token
+            google_token.google_token_expiry = new_expires_at
+            db.add(google_token)
             db.commit()
-            db.refresh(tenant)
+            db.refresh(google_token)
 
         calendar_id = ReminderService.DEFAULT_CALENDAR_ID
 
@@ -97,6 +107,7 @@ class ReminderService:
             )
 
         return results
+    
     @staticmethod
     def get_reminder_targets(db: Session) -> List[Dict[str, Any]]:
         tenants = (
