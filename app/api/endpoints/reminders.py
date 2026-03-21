@@ -70,7 +70,18 @@ class ReminderAlreadySentResponse(BaseModel):
     tipo_lembrete: str
     sent_at: Optional[str] = None
 
-
+class GoogleEventChangedResponse(BaseModel):
+    change_type: str
+    user_id: int
+    google_event_id: str
+    summary: Optional[str] = None
+    description: Optional[str] = None
+    old_start_datetime: Optional[str] = None
+    new_start_datetime: Optional[str] = None
+    old_end_datetime: Optional[str] = None
+    new_end_datetime: Optional[str] = None
+    status: Optional[str] = None
+    
 @router.get("/google-events", response_model=List[GoogleEventResponse])
 def get_google_events(
     user_id: int = Query(...),
@@ -201,4 +212,18 @@ def mark_reminder_sent(
         google_event_id=payload.google_event_id,
         tipo_lembrete=payload.tipo_lembrete,
         sent_at=payload.sent_at,
+    )
+    
+@router.get("/google-events-changed", response_model=List[GoogleEventChangedResponse])
+def get_google_events_changed(
+    user_id: int = Query(...),
+    after: datetime = Query(...),
+    before: datetime = Query(...),
+    db: Session = Depends(get_db),
+):
+    return ReminderService.get_google_events_changed(
+        db,
+        user_id=user_id,
+        after=after,
+        before=before,
     )

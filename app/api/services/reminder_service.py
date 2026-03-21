@@ -11,7 +11,7 @@ from app.api.models.google_token import GoogleToken
 from app.api.models.user import User
 from app.api.models.reminder_log import ReminderLog
 from app.api.services.google_service import GoogleAuthService
-
+from app.api.models.calendar_event_snapshot import CalendarEventSnapshot
 
 class ReminderService:
     DEFAULT_CALENDAR_ID = "primary"
@@ -388,3 +388,112 @@ class ReminderService:
         if value.tzinfo is None:
             return value.replace(tzinfo=timezone.utc)
         return value
+##########################
+#google range
+##########################    
+    @staticmethod
+    def get_google_events_changed(
+        db: Session,
+        *,
+        user_id: int,
+        after: datetime,
+        before: datetime,
+    ) -> List[Dict[str, Any]]:
+        after = ReminderService._normalize_dt(after)
+        before = ReminderService._normalize_dt(before)
+
+        events = ReminderService.get_google_events(
+            db,
+            user_id=user_id,
+            after=after,
+            before=before,
+        )
+
+        now_utc = datetime.now(timezone.utc)
+        results: List[Dict[str, Any]] = []
+
+        for event in events:
+            google_event_id = event.get("google_event_id")
+            if not google_event_id:
+                continue
+
+            start_dt = ReminderService._parse_snapshot_dt(event.get("start_datetime"))
+            end_dt = ReminderService._parse_snapshot_dt(event.get("end_datetime"))
+            status = event.get("status")
+            summary = event.get("summary")
+            description = event.get("description")
+
+            snapshot = (
+                db.query(CalendarEventSnapshot)
+                .filter(CalendarEventSnapshot.user_id == user_id)
+                .filter(CalendarEventSnapshot.google_event_id == google_event_id)
+                .first()
+            )
+
+            if snapshot is None:
+                snapshot = CalendarEventSnapshot(
+                    user_id=user_id,
+                    google_event_id=google_event_id,
+                    summary=summary,
+                    description=description,
+                    start_datetime=start_dt,
+                    end_datetime=end_dt,
+                    status=status,
+                    last_seen_at=now_utc,
+                )
+                db.add(snapshot)
+                db.commit()
+                db.refresh(snapshot)
+                continue
+
+            old_start = snapshot.start_datetime
+            old_end = snapshot.end_datetime
+            old_status = snapshot.status
+
+            change_type = None
+
+            if old_status != "cancelled" and status == "cancelled":
+                change_type = "cancelled"
+            elif old_start != start_dt or old_end != end_dt:
+                change_type = "rescheduled"
+
+            snapshot.summary = summary
+            snapshot.description = description
+            snapshot.start_datetime = start_dt
+            snapshot.end_datetime = end_dt
+            snapshot.status = status
+            snapshot.last_seen_at = now_utc
+
+            db.add(snapshot)
+            db.commit()
+            db.refresh(snapshot)
+
+            if change_type:
+                results.append(
+                    {
+                        "change_type": change_type,
+                        "user_id": user_id,
+                        "google_event_id": google_event_id,
+                        "summary": summary,
+                        "description": description,
+                        "old_start_datetime": old_start.isoformat() if old_start else None,
+                        "new_start_datetime": start_dt.isoformat() if start_dt else None,
+                        "old_end_datetime": old_end.isoformat() if old_end else None,
+                        "new_end_datetime": end_dt.isoformat() if end_dt else None,
+                        "status": status,
+                    }
+                )
+
+        return results
+    
+    @staticmethod
+    def _parse_snapshot_dt(value: Optional[str]) -> Optional[datetime]:
+        if not value:
+            return None
+
+        try:
+            return ReminderService._normalize_dt(
+                datetime.fromisoformat(value.replace("Z", "+00:00"))
+            )
+        except Exception:
+            return None
