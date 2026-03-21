@@ -250,6 +250,9 @@ class GoogleAuthService:
             timeout=30,
         )
 
+        if response.status_code == 401:
+            raise PermissionError(f"Google token inválido/expirado: {response.text}")
+
         if response.status_code != 200:
             raise Exception(f"Falha ao listar eventos do Google Calendar: {response.text}")
 

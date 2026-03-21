@@ -7,9 +7,9 @@ from sqlalchemy.orm import Session
 
 from app.api.models.tenant import Tenant
 from app.api.models.appointment import Appointment
-from app.api.services.google_service import GoogleAuthService
 from app.api.models.google_token import GoogleToken
 from app.api.services.google_service import GoogleAuthService
+
 
 class ReminderService:
     DEFAULT_CALENDAR_ID = "primary"
@@ -70,15 +70,41 @@ class ReminderService:
             db.commit()
             db.refresh(google_token)
 
-        calendar_id = ReminderService.DEFAULT_CALENDAR_ID
+        try:
+            payload = google_service.list_calendar_events(
+                access_token=access_token,
+                calendar_id=ReminderService.DEFAULT_CALENDAR_ID,
+                time_min=after.isoformat(),
+                time_max=before.isoformat(),
+                max_results=100,
+            )
+        except PermissionError:
+            if not refresh_token:
+                raise ValueError(
+                    f"user_id={user_id} sem refresh token válido para renovar acesso Google"
+                )
 
-        payload = google_service.list_calendar_events(
-            access_token=access_token,
-            calendar_id=calendar_id,
-            time_min=after.isoformat(),
-            time_max=before.isoformat(),
-            max_results=100,
-        )
+            refreshed = google_service.refresh_access_token(
+                access_token=access_token,
+                refresh_token=refresh_token,
+            )
+
+            access_token = refreshed["access"]
+            new_expires_at = refreshed["expiry"]
+
+            google_token.google_access_token = access_token
+            google_token.google_token_expiry = new_expires_at
+            db.add(google_token)
+            db.commit()
+            db.refresh(google_token)
+
+            payload = google_service.list_calendar_events(
+                access_token=access_token,
+                calendar_id=ReminderService.DEFAULT_CALENDAR_ID,
+                time_min=after.isoformat(),
+                time_max=before.isoformat(),
+                max_results=100,
+            )
 
         items = payload.get("items", [])
         results: List[Dict[str, Any]] = []
@@ -107,7 +133,7 @@ class ReminderService:
             )
 
         return results
-    
+
     @staticmethod
     def get_reminder_targets(db: Session) -> List[Dict[str, Any]]:
         tenants = (
@@ -122,6 +148,21 @@ class ReminderService:
         results: List[Dict[str, Any]] = []
 
         for tenant in tenants:
+            google_token = (
+                db.query(GoogleToken)
+                .filter(GoogleToken.user_id == tenant.user_id)
+                .first()
+            )
+
+            if not google_token:
+                continue
+
+            if not google_token.google_access_token:
+                continue
+
+            if not google_token.google_refresh_token:
+                continue
+
             results.append(
                 {
                     "tenant_id": tenant.id,
