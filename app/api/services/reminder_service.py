@@ -58,7 +58,6 @@ class ReminderService:
 
         access_token = google_token.google_access_token
         refresh_token = google_token.google_refresh_token
-        expires_at = google_token.google_token_expiry
         calendar_id = getattr(user, "calendar_id", None) or ReminderService.DEFAULT_CALENDAR_ID
 
         if not access_token:
@@ -69,52 +68,28 @@ class ReminderService:
 
         google_service = GoogleAuthService()
 
-        token_data = google_service.refresh_access_token_if_needed(
+        # força refresh sempre
+        refreshed = google_service.refresh_access_token(
             access_token=access_token,
             refresh_token=refresh_token,
-            expires_at=expires_at,
         )
 
-        access_token = token_data["access_token"]
-        new_expires_at = token_data["expires_at"]
+        access_token = refreshed["access"]
+        new_expires_at = refreshed["expiry"]
 
-        if token_data["refreshed"]:
-            google_token.google_access_token = access_token
-            google_token.google_token_expiry = new_expires_at
-            db.add(google_token)
-            db.commit()
-            db.refresh(google_token)
+        google_token.google_access_token = access_token
+        google_token.google_token_expiry = new_expires_at
+        db.add(google_token)
+        db.commit()
+        db.refresh(google_token)
 
-        try:
-            payload = google_service.list_calendar_events(
-                access_token=access_token,
-                calendar_id=calendar_id,
-                time_min=after.isoformat(),
-                time_max=before.isoformat(),
-                max_results=100,
-            )
-        except PermissionError:
-            refreshed = google_service.refresh_access_token(
-                access_token=access_token,
-                refresh_token=refresh_token,
-            )
-
-            access_token = refreshed["access"]
-            new_expires_at = refreshed["expiry"]
-
-            google_token.google_access_token = access_token
-            google_token.google_token_expiry = new_expires_at
-            db.add(google_token)
-            db.commit()
-            db.refresh(google_token)
-
-            payload = google_service.list_calendar_events(
-                access_token=access_token,
-                calendar_id=calendar_id,
-                time_min=after.isoformat(),
-                time_max=before.isoformat(),
-                max_results=100,
-            )
+        payload = google_service.list_calendar_events(
+            access_token=access_token,
+            calendar_id=calendar_id,
+            time_min=after.isoformat(),
+            time_max=before.isoformat(),
+            max_results=100,
+        )
 
         items = payload.get("items", [])
         results: List[Dict[str, Any]] = []
