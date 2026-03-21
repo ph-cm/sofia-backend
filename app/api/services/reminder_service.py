@@ -9,7 +9,7 @@ from app.api.models.tenant import Tenant
 from app.api.models.appointment import Appointment
 from app.api.models.google_token import GoogleToken
 from app.api.services.google_service import GoogleAuthService
-
+from app.api.models.user import User
 
 class ReminderService:
     DEFAULT_CALENDAR_ID = "primary"
@@ -140,7 +140,6 @@ class ReminderService:
             db.query(Tenant)
             .filter(Tenant.user_id.isnot(None))
             .filter(Tenant.chatwoot_account_id.isnot(None))
-            .filter(Tenant.chatwoot_inbox_id.isnot(None))
             .filter(Tenant.evolution_instance_name.isnot(None))
             .all()
         )
@@ -148,6 +147,24 @@ class ReminderService:
         results: List[Dict[str, Any]] = []
 
         for tenant in tenants:
+            user = (
+                db.query(User)
+                .filter(User.id == tenant.user_id)
+                .first()
+            )
+
+            if not user:
+                continue
+
+            if not getattr(user, "ativo", False):
+                continue
+
+            if not getattr(user, "inbox_id", None):
+                continue
+
+            if not getattr(user, "calendar_id", None):
+                continue
+
             google_token = (
                 db.query(GoogleToken)
                 .filter(GoogleToken.user_id == tenant.user_id)
@@ -166,14 +183,14 @@ class ReminderService:
             results.append(
                 {
                     "tenant_id": tenant.id,
-                    "user_id": tenant.user_id,
+                    "user_id": user.id,
                     "tenant_name": tenant.name,
-                    "calendar_id": ReminderService.DEFAULT_CALENDAR_ID,
+                    "calendar_id": user.calendar_id,
                     "chatwoot_account_id": tenant.chatwoot_account_id,
-                    "chatwoot_inbox_id": tenant.chatwoot_inbox_id,
+                    "chatwoot_inbox_id": user.inbox_id,
                     "evolution_instance_name": tenant.evolution_instance_name,
                     "cadence_hours": ReminderService.DEFAULT_CADENCE_HOURS,
-                    "timezone": ReminderService.DEFAULT_TIMEZONE,
+                    "timezone": user.timezone or ReminderService.DEFAULT_TIMEZONE,
                     "enabled": True,
                 }
             )
