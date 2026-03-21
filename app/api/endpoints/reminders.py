@@ -59,6 +59,29 @@ class MarkReminderSentResponse(BaseModel):
     tipo_lembrete: str
     sent_at: str
     
+class MarkReminderSentRequest(BaseModel):
+    user_id: int
+    google_event_id: str
+    tipo_lembrete: str
+    sent_at: Optional[datetime] = None
+
+
+class MarkReminderSentResponse(BaseModel):
+    success: bool
+    already_sent: bool
+    user_id: int
+    google_event_id: str
+    tipo_lembrete: str
+    sent_at: str
+
+
+class ReminderAlreadySentResponse(BaseModel):
+    already_sent: bool
+    user_id: int
+    google_event_id: str
+    tipo_lembrete: str
+    sent_at: Optional[str] = None
+    
 @router.get("/google-events", response_model=List[GoogleEventResponse])
 def get_google_events(
     user_id: int = Query(...),
@@ -168,6 +191,33 @@ def mark_reminder_sent(
     return ReminderService.mark_reminder_sent(
         db,
         appointment_id=payload.appointment_id,
+        tipo_lembrete=payload.tipo_lembrete,
+        sent_at=payload.sent_at,
+    )
+
+@router.get("/already-sent", response_model=ReminderAlreadySentResponse)
+def was_reminder_sent(
+    user_id: int = Query(...),
+    google_event_id: str = Query(...),
+    tipo_lembrete: str = Query(...),
+    db: Session = Depends(get_db),
+):
+    return ReminderService.was_reminder_sent(
+        db,
+        user_id=user_id,
+        google_event_id=google_event_id,
+        tipo_lembrete=tipo_lembrete,
+    )
+    
+@router.post("/mark-sent", response_model=MarkReminderSentResponse)
+def mark_reminder_sent(
+    payload: MarkReminderSentRequest,
+    db: Session = Depends(get_db),
+):
+    return ReminderService.mark_reminder_sent(
+        db,
+        user_id=payload.user_id,
+        google_event_id=payload.google_event_id,
         tipo_lembrete=payload.tipo_lembrete,
         sent_at=payload.sent_at,
     )

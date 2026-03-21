@@ -10,6 +10,7 @@ from app.api.models.appointment import Appointment
 from app.api.models.google_token import GoogleToken
 from app.api.services.google_service import GoogleAuthService
 from app.api.models.user import User
+from app.api.models.reminder_log import ReminderLog
 
 class ReminderService:
     DEFAULT_CALENDAR_ID = "primary"
@@ -258,24 +259,103 @@ class ReminderService:
             )
 
         return results
-
     @staticmethod
     def mark_reminder_sent(
         db: Session,
         *,
-        appointment_id: int,
+        user_id: int,
+        google_event_id: str,
         tipo_lembrete: str,
         sent_at: Optional[datetime] = None,
     ) -> Dict[str, Any]:
+        sent_at = ReminderService._normalize_dt(sent_at or datetime.now(timezone.utc))
+
+        existing = (
+            db.query(ReminderLog)
+            .filter(ReminderLog.user_id == user_id)
+            .filter(ReminderLog.google_event_id == google_event_id)
+            .filter(ReminderLog.tipo_lembrete == tipo_lembrete)
+            .first()
+        )
+
+        if existing:
+            return {
+                "success": True,
+                "already_sent": True,
+                "user_id": user_id,
+                "google_event_id": google_event_id,
+                "tipo_lembrete": tipo_lembrete,
+                "sent_at": existing.sent_at.isoformat(),
+            }
+
+        log = ReminderLog(
+            user_id=user_id,
+            google_event_id=google_event_id,
+            tipo_lembrete=tipo_lembrete,
+            sent_at=sent_at,
+        )
+
+        db.add(log)
+        db.commit()
+        db.refresh(log)
+
         return {
             "success": True,
-            "appointment_id": appointment_id,
+            "already_sent": False,
+            "user_id": user_id,
+            "google_event_id": google_event_id,
             "tipo_lembrete": tipo_lembrete,
-            "sent_at": ReminderService._normalize_dt(
-                sent_at or datetime.now(timezone.utc)
-            ).isoformat(),
+            "sent_at": log.sent_at.isoformat(),
         }
+        
+    @staticmethod
+    def mark_reminder_sent(
+        db: Session,
+        *,
+        user_id: int,
+        google_event_id: str,
+        tipo_lembrete: str,
+        sent_at: Optional[datetime] = None,
+    ) -> Dict[str, Any]:
+        sent_at = ReminderService._normalize_dt(sent_at or datetime.now(timezone.utc))
 
+        existing = (
+            db.query(ReminderLog)
+            .filter(ReminderLog.user_id == user_id)
+            .filter(ReminderLog.google_event_id == google_event_id)
+            .filter(ReminderLog.tipo_lembrete == tipo_lembrete)
+            .first()
+        )
+
+        if existing:
+            return {
+                "success": True,
+                "already_sent": True,
+                "user_id": user_id,
+                "google_event_id": google_event_id,
+                "tipo_lembrete": tipo_lembrete,
+                "sent_at": existing.sent_at.isoformat(),
+            }
+
+        log = ReminderLog(
+            user_id=user_id,
+            google_event_id=google_event_id,
+            tipo_lembrete=tipo_lembrete,
+            sent_at=sent_at,
+        )
+
+        db.add(log)
+        db.commit()
+        db.refresh(log)
+
+        return {
+            "success": True,
+            "already_sent": False,
+            "user_id": user_id,
+            "google_event_id": google_event_id,
+            "tipo_lembrete": tipo_lembrete,
+            "sent_at": log.sent_at.isoformat(),
+        }
     @staticmethod
     def _extract_phone(appt: Appointment) -> Optional[str]:
         possible_fields = [
