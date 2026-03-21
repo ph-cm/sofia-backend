@@ -8,9 +8,10 @@ from sqlalchemy.orm import Session
 from app.api.models.tenant import Tenant
 from app.api.models.appointment import Appointment
 from app.api.models.google_token import GoogleToken
-from app.api.services.google_service import GoogleAuthService
 from app.api.models.user import User
 from app.api.models.reminder_log import ReminderLog
+from app.api.services.google_service import GoogleAuthService
+
 
 class ReminderService:
     DEFAULT_CALENDAR_ID = "primary"
@@ -37,6 +38,15 @@ class ReminderService:
         if not tenant:
             raise ValueError(f"Tenant não encontrado para user_id={user_id}")
 
+        user = (
+            db.query(User)
+            .filter(User.id == user_id)
+            .first()
+        )
+
+        if not user:
+            raise ValueError(f"User não encontrado para user_id={user_id}")
+
         google_token = (
             db.query(GoogleToken)
             .filter(GoogleToken.user_id == user_id)
@@ -49,9 +59,13 @@ class ReminderService:
         access_token = google_token.google_access_token
         refresh_token = google_token.google_refresh_token
         expires_at = google_token.google_token_expiry
+        calendar_id = getattr(user, "calendar_id", None) or ReminderService.DEFAULT_CALENDAR_ID
 
         if not access_token:
             raise ValueError(f"user_id={user_id} sem access token Google")
+
+        if not refresh_token:
+            raise ValueError(f"user_id={user_id} sem refresh token Google")
 
         google_service = GoogleAuthService()
 
@@ -74,17 +88,12 @@ class ReminderService:
         try:
             payload = google_service.list_calendar_events(
                 access_token=access_token,
-                calendar_id=ReminderService.DEFAULT_CALENDAR_ID,
+                calendar_id=calendar_id,
                 time_min=after.isoformat(),
                 time_max=before.isoformat(),
                 max_results=100,
             )
         except PermissionError:
-            if not refresh_token:
-                raise ValueError(
-                    f"user_id={user_id} sem refresh token válido para renovar acesso Google"
-                )
-
             refreshed = google_service.refresh_access_token(
                 access_token=access_token,
                 refresh_token=refresh_token,
@@ -101,7 +110,7 @@ class ReminderService:
 
             payload = google_service.list_calendar_events(
                 access_token=access_token,
-                calendar_id=ReminderService.DEFAULT_CALENDAR_ID,
+                calendar_id=calendar_id,
                 time_min=after.isoformat(),
                 time_max=before.isoformat(),
                 max_results=100,
@@ -217,8 +226,7 @@ class ReminderService:
 
         if hasattr(Appointment, "status"):
             appointments = [
-                appt
-                for appt in appointments
+                appt for appt in appointments
                 if getattr(appt, "status", None) != "cancelled"
             ]
 
@@ -226,7 +234,6 @@ class ReminderService:
 
         for appt in appointments:
             start_dt = ReminderService._extract_start_datetime(appt)
-
             if after <= start_dt <= before:
                 filtered_appointments.append(appt)
 
@@ -259,6 +266,31 @@ class ReminderService:
             )
 
         return results
+
+    @staticmethod
+    def was_reminder_sent(
+        db: Session,
+        *,
+        user_id: int,
+        google_event_id: str,
+        tipo_lembrete: str,
+    ) -> Dict[str, Any]:
+        existing = (
+            db.query(ReminderLog)
+            .filter(ReminderLog.user_id == user_id)
+            .filter(ReminderLog.google_event_id == google_event_id)
+            .filter(ReminderLog.tipo_lembrete == tipo_lembrete)
+            .first()
+        )
+
+        return {
+            "already_sent": existing is not None,
+            "user_id": user_id,
+            "google_event_id": google_event_id,
+            "tipo_lembrete": tipo_lembrete,
+            "sent_at": existing.sent_at.isoformat() if existing else None,
+        }
+
     @staticmethod
     def mark_reminder_sent(
         db: Session,
@@ -307,55 +339,7 @@ class ReminderService:
             "tipo_lembrete": tipo_lembrete,
             "sent_at": log.sent_at.isoformat(),
         }
-        
-    @staticmethod
-    def mark_reminder_sent(
-        db: Session,
-        *,
-        user_id: int,
-        google_event_id: str,
-        tipo_lembrete: str,
-        sent_at: Optional[datetime] = None,
-    ) -> Dict[str, Any]:
-        sent_at = ReminderService._normalize_dt(sent_at or datetime.now(timezone.utc))
 
-        existing = (
-            db.query(ReminderLog)
-            .filter(ReminderLog.user_id == user_id)
-            .filter(ReminderLog.google_event_id == google_event_id)
-            .filter(ReminderLog.tipo_lembrete == tipo_lembrete)
-            .first()
-        )
-
-        if existing:
-            return {
-                "success": True,
-                "already_sent": True,
-                "user_id": user_id,
-                "google_event_id": google_event_id,
-                "tipo_lembrete": tipo_lembrete,
-                "sent_at": existing.sent_at.isoformat(),
-            }
-
-        log = ReminderLog(
-            user_id=user_id,
-            google_event_id=google_event_id,
-            tipo_lembrete=tipo_lembrete,
-            sent_at=sent_at,
-        )
-
-        db.add(log)
-        db.commit()
-        db.refresh(log)
-
-        return {
-            "success": True,
-            "already_sent": False,
-            "user_id": user_id,
-            "google_event_id": google_event_id,
-            "tipo_lembrete": tipo_lembrete,
-            "sent_at": log.sent_at.isoformat(),
-        }
     @staticmethod
     def _extract_phone(appt: Appointment) -> Optional[str]:
         possible_fields = [

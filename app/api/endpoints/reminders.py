@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
@@ -15,6 +13,7 @@ from app.api.models.appointment import Appointment
 
 router = APIRouter(prefix="/reminders", tags=["Reminders"])
 
+
 class GoogleEventResponse(BaseModel):
     google_event_id: Optional[str] = None
     status: Optional[str] = None
@@ -23,7 +22,8 @@ class GoogleEventResponse(BaseModel):
     start_datetime: Optional[str] = None
     end_datetime: Optional[str] = None
     html_link: Optional[str] = None
-    
+
+
 class ReminderTargetResponse(BaseModel):
     tenant_id: int
     user_id: int
@@ -48,18 +48,6 @@ class UpcomingAppointmentResponse(BaseModel):
 
 
 class MarkReminderSentRequest(BaseModel):
-    appointment_id: int
-    tipo_lembrete: str
-    sent_at: Optional[datetime] = None
-
-
-class MarkReminderSentResponse(BaseModel):
-    success: bool
-    appointment_id: int
-    tipo_lembrete: str
-    sent_at: str
-    
-class MarkReminderSentRequest(BaseModel):
     user_id: int
     google_event_id: str
     tipo_lembrete: str
@@ -81,7 +69,8 @@ class ReminderAlreadySentResponse(BaseModel):
     google_event_id: str
     tipo_lembrete: str
     sent_at: Optional[str] = None
-    
+
+
 @router.get("/google-events", response_model=List[GoogleEventResponse])
 def get_google_events(
     user_id: int = Query(...),
@@ -95,7 +84,8 @@ def get_google_events(
         after=after,
         before=before,
     )
-    
+
+
 @router.get("/debug-appointments-by-user")
 def debug_appointments_by_user(
     user_id: int,
@@ -131,6 +121,7 @@ def debug_appointments_by_user(
 
     return results
 
+
 @router.get("/debug-appointments")
 def debug_appointments(db: Session = Depends(get_db)) -> List[Dict[str, Any]]:
     appointments = db.query(Appointment).limit(20).all()
@@ -163,6 +154,7 @@ def debug_appointments(db: Session = Depends(get_db)) -> List[Dict[str, Any]]:
 
     return results
 
+
 @router.get("/targets", response_model=List[ReminderTargetResponse])
 def get_reminder_targets(db: Session = Depends(get_db)):
     return ReminderService.get_reminder_targets(db)
@@ -183,18 +175,6 @@ def get_upcoming_appointments(
     )
 
 
-@router.post("/mark-sent", response_model=MarkReminderSentResponse)
-def mark_reminder_sent(
-    payload: MarkReminderSentRequest,
-    db: Session = Depends(get_db),
-):
-    return ReminderService.mark_reminder_sent(
-        db,
-        appointment_id=payload.appointment_id,
-        tipo_lembrete=payload.tipo_lembrete,
-        sent_at=payload.sent_at,
-    )
-
 @router.get("/already-sent", response_model=ReminderAlreadySentResponse)
 def was_reminder_sent(
     user_id: int = Query(...),
@@ -208,7 +188,8 @@ def was_reminder_sent(
         google_event_id=google_event_id,
         tipo_lembrete=tipo_lembrete,
     )
-    
+
+
 @router.post("/mark-sent", response_model=MarkReminderSentResponse)
 def mark_reminder_sent(
     payload: MarkReminderSentRequest,
