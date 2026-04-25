@@ -4,7 +4,7 @@ from app.db.base_class import Base
 
 
 class TenantPaymentConfig(Base):
-    __tablename__ = "tenant_payment_configs"
+    __tablename__ = "tenant_payment_config"
 
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(String, nullable=False, index=True, unique=True)
