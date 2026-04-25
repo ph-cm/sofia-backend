@@ -17,6 +17,7 @@ from app.api.endpoints import finance
 from app.api.endpoints import analytics
 from app.api.endpoints import patients
 from app.api.endpoints import reminders
+from app.api.routes import payment_config
 
 app = FastAPI(
     title="SaaS Secretaria Inteligente",
@@ -74,6 +75,8 @@ app.include_router(finance.router)
 app.include_router(analytics.router)
 app.include_router(patients.router)
 app.include_router(reminders.router)
+app.include_router(payment_config.router)
+
 # Exemplo: Usando uma variável de configuração
 @app.get("/")
 def read_root():
