@@ -1,10 +1,11 @@
 from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel
+from uuid import UUID
 
 
 class TenantPaymentConfigBase(BaseModel):
-    deposit_per_child: int
+    deposit_per_child: float
     card_link_1_child: Optional[str] = None
     card_link_2_children: Optional[str] = None
     pix_key: str
@@ -12,12 +13,12 @@ class TenantPaymentConfigBase(BaseModel):
 
 
 class TenantPaymentConfigCreate(TenantPaymentConfigBase):
-    tenant_id: str
+    tenant_id: int
 
 
 class TenantPaymentConfigResponse(TenantPaymentConfigBase):
-    id: int
-    tenant_id: str
+    id: UUID
+    tenant_id: int
     created_at: datetime
 
     class Config:
