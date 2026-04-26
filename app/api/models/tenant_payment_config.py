@@ -7,7 +7,7 @@ class TenantPaymentConfig(Base):
     __tablename__ = "tenant_payment_config"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(String, nullable=False, index=True, unique=True)
+    tenant_id = Column(Integer, nullable=False, index=True, unique=True)
     deposit_per_child = Column(Integer, nullable=False)
     card_link_1_child = Column(String, nullable=True)
     card_link_2_children = Column(String, nullable=True)

@@ -9,7 +9,7 @@ router = APIRouter(prefix="/tenants", tags=["Payment Config"])
 
 @router.post("/{tenant_id}/payment-config", response_model=TenantPaymentConfigResponse, status_code=201)
 def save_payment_config(
-    tenant_id: str,
+    tenant_id: int,
     payload: TenantPaymentConfigBase,
     db: Session = Depends(get_db),
 ):
@@ -18,7 +18,7 @@ def save_payment_config(
 
 @router.get("/{tenant_id}/payment-options", response_model=PaymentOptionsResponse)
 def get_payment_options(
-    tenant_id: str,
+    tenant_id: int,
     children: int = Query(..., ge=1),
     db: Session = Depends(get_db),
 ):
